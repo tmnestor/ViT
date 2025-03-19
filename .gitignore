@@ -1,0 +1,21 @@
+# Ignore all files by default
+*
+
+# Don't ignore directories to maintain structure
+!*/
+
+# Don't ignore .gitignore
+!.gitignore
+
+# Don't ignore test_images directory and its contents
+!test_images/
+!test_images/*.jpg
+
+# Don't ignore source files, text files and markdown files
+!*.py
+!*.md
+!*.txt
+
+# Ignore __pycache__ directories
+__pycache__/
+*.py[cod]
