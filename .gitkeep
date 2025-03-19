@@ -1,0 +1,4 @@
+
+# Keep the directory but ignore its contents
+receipt_collages/*
+!receipt_collages/.gitkeep
