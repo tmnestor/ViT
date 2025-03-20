@@ -17,11 +17,12 @@ from config import get_config
 
 # Custom dataset for receipt counting (as classification)
 class ReceiptCollageDataset(Dataset):
-    def __init__(self, csv_file, img_dir, transform=None, augment=False):
+    def __init__(self, csv_file, img_dir, transform=None, augment=False, binary=False):
         self.data = pd.read_csv(csv_file)
         self.img_dir = img_dir
         # Default to augmented transform for training, standard for evaluation
         self.transform = transform or ReceiptProcessor(augment=augment).transform
+        self.binary = binary  # Flag for binary classification (0 vs 1+ receipts)
 
     def __len__(self):
         return len(self.data)
@@ -34,9 +35,16 @@ class ReceiptCollageDataset(Dataset):
         if self.transform:
             image = self.transform(image=image)["image"]
 
-        # Receipt count as target class (0-5)
+        # Receipt count as target class
         count = int(self.data.iloc[idx, 1])
-        return image, torch.tensor(count, dtype=torch.long)
+        
+        if self.binary:
+            # Convert to binary classification (0 vs 1+ receipts)
+            binary_label = 1 if count > 0 else 0
+            return image, torch.tensor(binary_label, dtype=torch.long)
+        else:
+            # Original multiclass classification (0-5 receipts) 
+            return image, torch.tensor(count, dtype=torch.long)
 
 
 def validate(model, dataloader, criterion, device):
@@ -194,21 +202,42 @@ def train_model(
     batch_size=16,
     lr=1e-4,
     output_dir="models",
+    binary=False,
 ):
     """
     Train the Swin Transformer model for receipt counting as a classification task.
+    
+    Args:
+        train_csv: Path to training CSV file
+        train_dir: Directory containing training images
+        val_csv: Path to validation CSV file (optional)
+        val_dir: Directory containing validation images (optional)
+        epochs: Number of training epochs
+        batch_size: Batch size for training
+        lr: Learning rate
+        output_dir: Directory to save trained model and results
+        binary: If True, use binary classification (0 vs 1+ receipts)
     """
     # Create output directory
     os.makedirs(output_dir, exist_ok=True)
+    
+    # Configure for binary classification if requested
+    config = get_config()
+    if binary:
+        config.set_binary_mode(True)
+        print("Using binary classification (multiple receipts or not)")
+    else:
+        config.set_binary_mode(False)
+        print(f"Using multi-class classification (0-{len(config.class_distribution)-1} receipts)")
 
     # Initialize datasets and loaders with augmentation for training
-    train_dataset = ReceiptCollageDataset(train_csv, train_dir, augment=True)
+    train_dataset = ReceiptCollageDataset(train_csv, train_dir, augment=True, binary=binary)
     train_loader = DataLoader(
         train_dataset, batch_size=batch_size, shuffle=True, num_workers=4
     )
 
     if val_csv and val_dir:
-        val_dataset = ReceiptCollageDataset(val_csv, val_dir, augment=False)  # No augmentation for validation
+        val_dataset = ReceiptCollageDataset(val_csv, val_dir, augment=False, binary=binary)  # No augmentation for validation
         val_loader = DataLoader(
             val_dataset, batch_size=batch_size, shuffle=False, num_workers=4
         )
@@ -217,8 +246,8 @@ def train_model(
         )
     else:
         # Create a validation split from training data
-        train_data_with_aug = ReceiptCollageDataset(train_csv, train_dir, augment=True)  # With augmentation
-        val_data_no_aug = ReceiptCollageDataset(train_csv, train_dir, augment=False)  # No augmentation
+        train_data_with_aug = ReceiptCollageDataset(train_csv, train_dir, augment=True, binary=binary)  # With augmentation
+        val_data_no_aug = ReceiptCollageDataset(train_csv, train_dir, augment=False, binary=binary)  # No augmentation
         
         train_size = int(0.8 * len(train_data_with_aug))
         val_size = len(train_data_with_aug) - train_size
@@ -474,6 +503,10 @@ def main():
         "--class_dist", 
         help="Comma-separated class distribution (e.g., '0.3,0.2,0.2,0.1,0.1,0.1')"
     )
+    parser.add_argument(
+        "--binary", action="store_true",
+        help="Train as binary classification (multiple receipts or not)"
+    )
 
     args = parser.parse_args()
 
@@ -484,17 +517,22 @@ def main():
             raise FileNotFoundError(f"Configuration file not found: {args.config}")
         config.load_from_file(args.config, silent=False)  # Explicitly show this load
     
-    # Override class distribution if provided
-    if args.class_dist:
+    # Override class distribution if provided (and not in binary mode)
+    if args.class_dist and not args.binary:
         try:
             dist = [float(x) for x in args.class_dist.split(',')]
-            if len(dist) != 6:
-                raise ValueError("Class distribution must have exactly 6 values")
+            if len(dist) != 5 and not args.binary:
+                raise ValueError("Class distribution must have exactly 5 values for multiclass mode")
             config.update_class_distribution(dist)
             print(f"Using custom class distribution: {dist}")
         except Exception as e:
             print(f"Error parsing class distribution: {e}")
             print("Using default class distribution")
+    
+    # If binary mode is specified, it overrides any class_dist setting
+    if args.binary:
+        # Binary mode configuration will be handled in train_model
+        print("Binary mode specified - will train for 'multiple receipts or not' classification")
 
     train_model(
         args.train_csv,
@@ -505,6 +543,7 @@ def main():
         batch_size=args.batch_size,
         lr=args.lr,
         output_dir=args.output_dir,
+        binary=args.binary,
     )
 
 

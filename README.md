@@ -2,6 +2,107 @@
 
 A computer vision project comparing Vision Transformer architectures (Swin-Tiny and ViT-Base) for counting receipts in images.
 
+## Mathematical Formulation of Metrics, Weights, and Calibration
+
+### Classification Metrics
+
+#### Accuracy
+
+Accuracy is the most straightforward metric, measuring the proportion of correct predictions among all 
+predictions:
+
+$$\text{Accuracy} = \frac{\text{Number of Correct Predictions}}{\text{Total Number of Predictions}} = 
+\frac{TP + TN}{TP + TN + FP + FN}$$
+
+Where $TP$ = True Positives, $TN$ = True Negatives, $FP$ = False Positives, and $FN$ = False Negatives.
+
+#### Balanced Accuracy
+
+For imbalanced datasets, balanced accuracy provides a better performance measure by accounting for class 
+imbalance:
+
+$$\text{Balanced Accuracy} = \frac{1}{n} \sum_{i=1}^{n} \frac{TP_i}{TP_i + FN_i}$$
+
+Where $n$ is the number of classes, and $\frac{TP_i}{TP_i + FN_i}$ represents the recall for class $i$.
+
+#### F1 Macro Score
+
+The F1 score is the harmonic mean of precision and recall. F1 Macro calculates the F1 score for each class 
+independently and then takes the average:
+
+$$\text{F1 Macro} = \frac{1}{n} \sum_{i=1}^{n} \frac{2 \times \text{Precision}_i \times 
+\text{Recall}_i}{\text{Precision}_i + \text{Recall}_i}$$
+
+Where:
+- $\text{Precision}_i = \frac{TP_i}{TP_i + FP_i}$
+- $\text{Recall}_i = \frac{TP_i}{TP_i + FN_i}$
+
+### Class Weights and Calibration
+
+#### Class Weights for Imbalanced Data
+
+To address class imbalance during training, we apply inverse frequency weighting:
+
+$$\text{Raw Weight}_i = \frac{1}{p_i}$$
+
+Where $p_i$ is the prior probability (relative frequency) of class $i$ in the training data.
+
+We then normalize these weights to maintain proper scaling:
+
+$$\text{Normalized Weight}_i = \frac{\text{Raw Weight}_i}{\sum_{j=1}^{n} \text{Raw Weight}_j} \times n$$
+
+The multiplication by $n$ (number of classes) ensures that the average weight remains around 1.0.
+
+#### Bayesian Calibration Factors
+
+Our calibration approach uses Bayesian principles to correct for overconfidence in minority classes due to 
+class weighting during training (Guo et al., 2017)[^1].
+
+For each class $i$, we compute the calibration factor as:
+
+$$\text{Calibration Factor}_i = p_i \times \sqrt{\frac{p_{\text{ref}}}{p_i}}$$
+
+Where:
+- $p_i$ is the prior probability of class $i$
+- $p_{\text{ref}} = \frac{1}{n}$ represents the reference probability for a balanced dataset
+
+This formulation provides a principled Bayesian adjustment that balances the influence of the prior while 
+compensating for minority classes. The square root term implements a form of Jeffreys prior[^2], which is a 
+common choice in Bayesian statistics when dealing with classification problems.
+
+For inference, we apply these calibration factors to the raw model outputs:
+
+$$\text{Calibrated Probability}_i = \frac{\text{Raw Probability}_i \times \text{Calibration Factor}_i \times
+p_i}{\sum_{j=1}^{n} \text{Raw Probability}_j \times \text{Calibration Factor}_j \times p_j}$$
+
+This recalibration helps prevent the model from over-predicting minority classes, resulting in more accurate
+predictions that better reflect real-world class distributions.
+
+## System Architecture
+
+The receipt counting system employs a flexible configuration approach that dynamically sets the number of classes based on configuration parameters rather than hardcoded values. This design allows the system to adapt to changing class probability distributions without requiring code modifications.
+
+### Key Components:
+
+1. **Configuration System**
+   - Dynamically loads class distribution from JSON config files
+   - Automatically derives calibration factors from class distribution
+   - Provides silent loading option to prevent repetitive logging messages
+
+2. **Model Creation**
+   - ViT and Swin Transformer models instantiated with dynamic class counts
+   - Configuration-based weight and head dimension determination
+   - Customized classification heads with improved regularization
+
+3. **Training Pipeline**
+   - Dynamic validation metrics calculation based on class count
+   - Adaptive plot generation for confusion matrices and class distributions
+   - Early stopping based on balanced accuracy and F1 macro improvements
+
+## Vision Transformer (ViT) Receipt Counter
+
+A computer vision project comparing Vision Transformer architectures (Swin-Tiny and ViT-Base) for counting receipts in images.
+
 ## Project Overview
 
 This project compares the Swin-Tiny and ViT-Base vision transformer architectures to determine which can more accurately count the number of receipts in an image. Both models use a classification approach to predict the number of receipts (0-5) in synthetic collage images.
@@ -248,74 +349,135 @@ Both models are fine-tuned using the AdamW optimizer with learning rate 5e-5, in
 
 ## Configuration System
 
-This project includes a centralized configuration system to make the receipt counter adaptable to changes in class distribution. This is especially important in production environments where the real-world distribution of classes may differ from the training distribution.
+This project includes a comprehensive centralized configuration system to make the receipt counter adaptable to changes in class distribution and model architecture parameters. This is especially important in production environments where the real-world distribution of classes may differ from the training distribution, or when you need to modify hyperparameters for different deployment scenarios.
 
-### Configuration File
+### Single Source of Truth
 
-The configuration system uses a JSON file for defining class distribution and calibration factors:
+All default configuration values are defined in `config.py` as constants, making it the single source of truth for the project. This approach eliminates inconsistencies between code and external configuration files.
 
-```json
-{
-  "class_distribution": [0.3, 0.2, 0.2, 0.1, 0.1, 0.1]
+```python
+# Default class distribution and parameters from config.py
+DEFAULT_CLASS_DISTRIBUTION = [0.4, 0.2, 0.2, 0.1, 0.1]
+DEFAULT_BINARY_DISTRIBUTION = [0.6, 0.4]
+
+DEFAULT_MODEL_PARAMS = {
+    # Image parameters
+    "image_size": 224,
+    "normalization_mean": [0.485, 0.456, 0.406],
+    "normalization_std": [0.229, 0.224, 0.225],
+    # Classifier architecture
+    "classifier_dims": [768, 512, 256],
+    "dropout_rates": [0.4, 0.4, 0.3],
+    # Training parameters
+    "batch_size": 16,
+    "learning_rate": 5e-5,
+    "weight_decay": 0.01,
+    "num_workers": 4,
+    "label_smoothing": 0.1,
+    # And more...
 }
 ```
 
-A default configuration file (`receipt_config.json`) is included, but you can create custom configurations for different deployment scenarios.
+You can save the current configuration to a JSON file for reference or sharing, but the system does not rely on external files for initialization.
 
 ### Environment Variables
 
-Configuration can also be provided through environment variables:
+To override defaults without modifying the code, you can use environment variables:
 
 ```bash
 # Set class distribution
 export RECEIPT_CLASS_DIST="0.4,0.2,0.2,0.1,0.1"
 
-# Set config file path
-export RECEIPT_CONFIG_PATH="/path/to/custom/config.json"
+# Set model parameters directly
+export RECEIPT_IMAGE_SIZE="256"
+export RECEIPT_BATCH_SIZE="32" 
+export RECEIPT_LEARNING_RATE="1e-5"
+export RECEIPT_NUM_WORKERS="8"
+export RECEIPT_WEIGHT_DECAY="0.005"
+export RECEIPT_LABEL_SMOOTHING="0.05"
+export RECEIPT_GRADIENT_CLIP="2.0"
 ```
 
-Environment variables take precedence over the config file. The calibration factors will be automatically derived from the class distribution.
+The calibration factors will be automatically derived from the class distribution.
 
 ### Using the Configuration System
 
-All core scripts support loading configuration using the `--config` parameter:
+All core scripts support direct class distribution overrides via command line arguments:
 
 ```bash
-# Training with custom configuration
-python train_vit_classification.py --config custom_config.json
-
 # Direct override of class distribution
 python train_vit_classification.py --class_dist "0.25,0.25,0.2,0.1,0.1,0.1"
 
-# Testing with custom configuration
-python individual_image_tester.py --image test.jpg --model model.pth --config custom_config.json
+# Set binary mode
+python evaluate_vit_counter.py --model models/receipt_counter_vit_best.pth --binary
+```
 
-# Creating collages with custom distribution from configuration
-python create_receipt_collages.py --config custom_config.json
+For more complex configuration, use environment variables:
+
+```bash
+# Set image size and batch size for training
+export RECEIPT_IMAGE_SIZE=256
+export RECEIPT_BATCH_SIZE=32
+export RECEIPT_NUM_WORKERS=8
+python train_vit_classification.py
+
+# Use environment variables for class distribution
+export RECEIPT_CLASS_DIST="0.3,0.2,0.2,0.1,0.1"
+python evaluate_vit_counter.py --model models/receipt_counter_vit_best.pth
+```
+
+You can export the current configuration to a JSON file for reference:
+
+```python
+from config import get_config
+config = get_config()
+config.save_to_file("current_config.json")
 ```
 
 ### How the Configuration System Works
 
 The configuration system is implemented as a singleton in `config.py`:
 
-1. When imported, it initializes with default values
-2. It checks for a configuration file (`receipt_config.json` by default)
-3. It checks for environment variables that might override file settings
-4. Based on the class distribution, it automatically calculates:
+1. When imported, it initializes with default values directly from constants in the file
+2. It checks for environment variables that might override these defaults
+3. Based on the class distribution, it automatically calculates:
    - Inverse weights for loss function
    - Normalized weights
    - Scaled weights for CrossEntropyLoss
    - **Bayesian calibration factors** for inference-time calibration
+4. It provides access to model parameters with safe defaults:
+   - Model architecture parameters (image size, classifier dimensions)
+   - Training parameters (batch size, learning rate, workers)
+   - Optimizer settings (weight decay, gradient clipping)
+   - Scheduler parameters (factor, patience, minimum learning rate)
+   - Early stopping settings
 
-The simplified JSON configuration only requires specifying the class distribution:
+When exporting to JSON, the configuration looks like this:
 
 ```json
 {
-  "class_distribution": [0.4, 0.2, 0.2, 0.1, 0.1]
+  "binary_mode": false,
+  "class_distribution": [0.4, 0.2, 0.2, 0.1, 0.1],
+  "model_params": {
+    "image_size": 224,
+    "batch_size": 16,
+    "learning_rate": 5e-5,
+    "num_workers": 4,
+    "label_smoothing": 0.1,
+    "classifier_dims": [768, 512, 256],
+    "dropout_rates": [0.4, 0.4, 0.3],
+    "weight_decay": 0.01,
+    "lr_scheduler_factor": 0.5,
+    "lr_scheduler_patience": 2,
+    "min_lr": 1e-6,
+    "gradient_clip_value": 1.0,
+    "early_stopping_patience": 8
+  },
+  "derived_calibration_factors": [1.0, 0.894, 0.894, 0.632, 0.632]
 }
 ```
 
-During training and inference, the system provides tensors ready for use with PyTorch:
+During training and inference, the system provides tensors and parameters ready for use with PyTorch:
 
 ```python
 from config import get_config
@@ -325,18 +487,24 @@ config = get_config()
 
 # Get class weights for loss function
 weights = config.get_class_weights_tensor(device)
-criterion = nn.CrossEntropyLoss(weight=weights, label_smoothing=0.1)
+label_smoothing = config.get_model_param("label_smoothing", 0.1)
+criterion = nn.CrossEntropyLoss(weight=weights, label_smoothing=label_smoothing)
 
 # Get automatically derived calibration factors for inference
 calibration = config.get_calibration_tensor(device)
 class_prior = config.get_class_prior_tensor(device)
+
+# Get model architecture parameters
+image_size = config.get_model_param("image_size", 224)
+classifier_dims = config.get_model_param("classifier_dims", [768, 512, 256])
+dropout_rates = config.get_model_param("dropout_rates", [0.4, 0.4, 0.3])
 
 # To understand the derivation of calibration factors
 explanation = config.explain_calibration()
 print(explanation)
 ```
 
-The `explain_calibration()` method provides a detailed breakdown of how each calibration factor is derived from the class distribution, making the system transparent and interpretable.
+The `explain_calibration()` method provides a detailed breakdown of how each calibration factor is derived from the class distribution, making the system transparent and interpretable. All hardcoded values like image sizes, learning rates, batch sizes, and architecture parameters are now configurable through this centralized system.
 
 ## Class Weighting and Calibration
 
@@ -469,3 +637,9 @@ from transformer_vit import create_vit_transformer    # ViT-Base
 from transformer_swin import load_swin_model
 from transformer_vit import load_vit_model
 ```
+
+## References
+
+[^1]: Guo, C., Pleiss, G., Sun, Y., & Weinberger, K. Q. (2017). On calibration of modern neural networks. In Proceedings of the 34th International Conference on Machine Learning (pp. 1321-1330).
+
+[^2]: Jeffreys, H. (1946). An invariant form for the prior probability in estimation problems. Proceedings of the Royal Society of London. Series A, Mathematical and Physical Sciences, 186(1007), 453-461.

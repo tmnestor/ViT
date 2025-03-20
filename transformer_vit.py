@@ -16,9 +16,11 @@ def create_vit_transformer(pretrained=True, num_classes=None, verbose=True):
     from transformers import ViTForImageClassification
     import transformers
     
+    # Get configuration
+    config = get_config()
+    
     # Get number of classes from config if not provided
     if num_classes is None:
-        config = get_config()
         num_classes = len(config.class_distribution)
     
     # Temporarily disable HuggingFace warnings if not verbose
@@ -38,22 +40,27 @@ def create_vit_transformer(pretrained=True, num_classes=None, verbose=True):
     if not verbose:
         transformers.logging.set_verbosity(prev_verbosity)
     
-    # Replace classification head with stronger regularization and increased capacity
-    model.classifier = nn.Sequential(
-        nn.Linear(model.classifier.in_features, 768),  # Larger first hidden layer
-        nn.BatchNorm1d(768),
-        nn.GELU(),
-        nn.Dropout(0.4),  # Increased dropout
-        nn.Linear(768, 512),
-        nn.BatchNorm1d(512),
-        nn.GELU(),
-        nn.Dropout(0.4),  # Increased dropout
-        nn.Linear(512, 256),
-        nn.BatchNorm1d(256),
-        nn.GELU(),
-        nn.Dropout(0.3),
-        nn.Linear(256, num_classes)
-    )
+    # Get classifier architecture parameters from config
+    classifier_dims = config.get_model_param("classifier_dims", [768, 512, 256])
+    dropout_rates = config.get_model_param("dropout_rates", [0.4, 0.4, 0.3])
+    
+    # Create classification layers
+    layers = []
+    in_features = model.classifier.in_features
+    
+    # Build sequential model with the configured parameters
+    for i, dim in enumerate(classifier_dims):
+        layers.append(nn.Linear(in_features, dim))
+        layers.append(nn.BatchNorm1d(dim))
+        layers.append(nn.GELU())
+        layers.append(nn.Dropout(dropout_rates[i]))
+        in_features = dim
+    
+    # Add final classification layer
+    layers.append(nn.Linear(in_features, num_classes))
+    
+    # Replace the classifier with our custom architecture
+    model.classifier = nn.Sequential(*layers)
     
     return model
 

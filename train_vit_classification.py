@@ -17,11 +17,12 @@ from config import get_config
 
 # Custom dataset for receipt counting (as classification)
 class ReceiptDataset(Dataset):
-    def __init__(self, csv_file, img_dir, transform=None, augment=False):
+    def __init__(self, csv_file, img_dir, transform=None, augment=False, binary=False):
         self.data = pd.read_csv(csv_file)
         self.img_dir = img_dir
         # Default to augmented transform for training, standard for evaluation
         self.transform = transform or ReceiptProcessor(augment=augment).transform
+        self.binary = binary  # Flag for binary classification (0 vs 1+ receipts)
 
     def __len__(self):
         return len(self.data)
@@ -34,9 +35,16 @@ class ReceiptDataset(Dataset):
         if self.transform:
             image = self.transform(image=image)["image"]
 
-        # Receipt count as target class (0-5)
+        # Receipt count as target class
         count = int(self.data.iloc[idx, 1])
-        return image, torch.tensor(count, dtype=torch.long)
+        
+        if self.binary:
+            # Convert to binary classification (0 vs 1+ receipts)
+            binary_label = 1 if count > 0 else 0
+            return image, torch.tensor(binary_label, dtype=torch.long)
+        else:
+            # Original multiclass classification (0-5 receipts)
+            return image, torch.tensor(count, dtype=torch.long)
 
 
 def validate(model, dataloader, criterion, device):
@@ -194,12 +202,33 @@ def train_model(
     batch_size=16,
     lr=1e-4,
     output_dir="models",
+    binary=False,
 ):
     """
     Train the ViT-Base model for receipt counting as a classification task.
+    
+    Args:
+        train_csv: Path to training CSV file
+        train_dir: Directory containing training images
+        val_csv: Path to validation CSV file (optional)
+        val_dir: Directory containing validation images (optional)
+        epochs: Number of training epochs
+        batch_size: Batch size for training
+        lr: Learning rate
+        output_dir: Directory to save trained model and results
+        binary: If True, use binary classification (0 vs 1+ receipts)
     """
     # Create output directory
     os.makedirs(output_dir, exist_ok=True)
+    
+    # Configure for binary classification if requested
+    config = get_config()
+    if binary:
+        config.set_binary_mode(True)
+        print("Using binary classification (multiple receipts or not)")
+    else:
+        config.set_binary_mode(False)
+        print(f"Using multi-class classification (0-{len(config.class_distribution)-1} receipts)")
 
     # Determine the device
     if torch.cuda.is_available():
@@ -212,25 +241,28 @@ def train_model(
         device = torch.device("cpu")
     print(f"Using device: {device}")
 
+    # Get configuration parameters
+    num_workers = config.get_model_param("num_workers", 4)
+    
     # Initialize training dataset and loader with augmentation
-    train_dataset = ReceiptDataset(train_csv, train_dir, augment=True)
+    train_dataset = ReceiptDataset(train_csv, train_dir, augment=True, binary=binary)
     train_loader = DataLoader(
-        train_dataset, batch_size=batch_size, shuffle=True, num_workers=4
+        train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers
     )
-
+    
     # Initialize validation dataset and loader if provided (no augmentation)
     if val_csv and val_dir:
-        val_dataset = ReceiptDataset(val_csv, val_dir, augment=False)
+        val_dataset = ReceiptDataset(val_csv, val_dir, augment=False, binary=binary)
         val_loader = DataLoader(
-            val_dataset, batch_size=batch_size, shuffle=False, num_workers=4
+            val_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers
         )
         print(
             f"Training on {len(train_dataset)} samples, validating on {len(val_dataset)} samples"
         )
     else:
         # Create a validation split from training data
-        train_data_with_aug = ReceiptDataset(train_csv, train_dir, augment=True)  # With augmentation
-        val_data_no_aug = ReceiptDataset(train_csv, train_dir, augment=False)  # No augmentation
+        train_data_with_aug = ReceiptDataset(train_csv, train_dir, augment=True, binary=binary)  # With augmentation
+        val_data_no_aug = ReceiptDataset(train_csv, train_dir, augment=False, binary=binary)  # No augmentation
         
         train_size = int(0.8 * len(train_data_with_aug))
         val_size = len(train_data_with_aug) - train_size
@@ -246,10 +278,10 @@ def train_model(
         
         # Create data loaders with appropriate samplers
         train_loader = DataLoader(
-            train_data_with_aug, batch_size=batch_size, sampler=train_sampler, num_workers=4
+            train_data_with_aug, batch_size=batch_size, sampler=train_sampler, num_workers=num_workers
         )
         val_loader = DataLoader(
-            val_data_no_aug, batch_size=batch_size, sampler=val_sampler, num_workers=4
+            val_data_no_aug, batch_size=batch_size, sampler=val_sampler, num_workers=num_workers
         )
         print(
             f"Split {len(train_dataset)} samples into {train_size} training and {val_size} validation"
@@ -261,7 +293,6 @@ def train_model(
 
     # Loss and optimizer with more robust learning rate control
     # Get class weights from configuration system
-    config = get_config()
     print(f"Using class distribution: {config.class_distribution}")
     print(f"Using calibration factors: {config.calibration_factors}")
     
@@ -269,29 +300,36 @@ def train_model(
     normalized_weights = config.get_class_weights_tensor(device)
     print(f"Using class weights: {normalized_weights}")
     
-    # Use label smoothing (0.1) along with class weights to improve generalization
+    # Get optimizer parameters from config
+    label_smoothing = config.get_model_param("label_smoothing", 0.1)
+    weight_decay = config.get_model_param("weight_decay", 0.01)
+    lr_scheduler_factor = config.get_model_param("lr_scheduler_factor", 0.5)
+    lr_scheduler_patience = config.get_model_param("lr_scheduler_patience", 2)
+    min_lr = config.get_model_param("min_lr", 1e-6)
+    
+    # Use label smoothing along with class weights to improve generalization
     criterion = nn.CrossEntropyLoss(
         weight=normalized_weights,
-        label_smoothing=0.1  # Add label smoothing to help with overfitting
+        label_smoothing=label_smoothing  # Add label smoothing to help with overfitting
     )  # Weighted classification loss with smoothing
-    optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=0.01)
+    optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
     
     # Use ReduceLROnPlateau scheduler to reduce LR when validation metrics plateau
     # This helps prevent erratic bouncing around the optimum
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, 
         mode='max',           # Monitor balanced accuracy which we want to maximize
-        factor=0.5,          # Multiply LR by this factor on plateau
-        patience=2,          # Number of epochs with no improvement before reducing LR
+        factor=lr_scheduler_factor,  # Multiply LR by this factor on plateau
+        patience=lr_scheduler_patience,  # Number of epochs with no improvement before reducing LR
         verbose=True,        # Print message when LR is reduced
-        min_lr=1e-6          # Don't reduce LR below this value
+        min_lr=min_lr        # Don't reduce LR below this value
     )
 
     # Training metrics
     history = {"train_loss": [], "val_loss": [], "val_acc": [], "val_balanced_acc": [], "val_f1_macro": []}
 
-    # For early stopping - increased patience due to more complex model and augmentation
-    patience = 8  # Increased from 5 to give model more time to converge
+    # For early stopping - get patience from config
+    patience = config.get_model_param("early_stopping_patience", 8)
     patience_counter = 0
     best_balanced_acc = 0
     best_f1_macro = 0  # Also track F1 macro improvement
@@ -323,7 +361,8 @@ def train_model(
             loss.backward()
             
             # Apply gradient clipping to prevent large updates
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            gradient_clip_value = config.get_model_param("gradient_clip_value", 1.0)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=gradient_clip_value)
             
             optimizer.step()
 
@@ -477,35 +516,40 @@ def main():
         default="models",
         help="Directory to save trained model and results",
     )
-    parser.add_argument(
-        "--config",
-        help="Path to configuration JSON file with class distribution and calibration factors",
-    )
+#    parser.add_argument(
+#        "--config",
+#        help="Path to configuration JSON file with class distribution and calibration factors",
+#    )
     parser.add_argument(
         "--class_dist", 
         help="Comma-separated class distribution (e.g., '0.3,0.2,0.2,0.1,0.1,0.1')"
     )
+    parser.add_argument(
+        "--binary", action="store_true",
+        help="Train as binary classification (multiple receipts or not)"
+    )
 
     args = parser.parse_args()
 
-    # Load configuration if provided
+    # Get configuration singleton
     config = get_config()
-    if args.config:
-        if not os.path.exists(args.config):
-            raise FileNotFoundError(f"Configuration file not found: {args.config}")
-        config.load_from_file(args.config, silent=False)  # Explicitly show this load
     
-    # Override class distribution if provided
-    if args.class_dist:
+    # Override class distribution if provided (and not in binary mode)
+    if args.class_dist and not args.binary:
         try:
             dist = [float(x) for x in args.class_dist.split(',')]
-            if len(dist) != 6:
-                raise ValueError("Class distribution must have exactly 6 values")
+            if len(dist) != 5 and not args.binary:
+                raise ValueError("Class distribution must have exactly 5 values for multiclass mode")
             config.update_class_distribution(dist)
             print(f"Using custom class distribution: {dist}")
         except Exception as e:
             print(f"Error parsing class distribution: {e}")
             print("Using default class distribution")
+    
+    # If binary mode is specified, it overrides any class_dist setting
+    if args.binary:
+        # Binary mode configuration will be handled in train_model
+        print("Binary mode specified - will train for 'multiple receipts or not' classification")
 
     # Validate that files exist
     if not os.path.exists(args.train_csv):
@@ -526,6 +570,7 @@ def main():
         batch_size=args.batch_size,
         lr=args.lr,
         output_dir=args.output_dir,
+        binary=args.binary,
     )
 
 

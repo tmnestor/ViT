@@ -16,20 +16,26 @@ from config import get_config
 
 # Standalone dataset class to avoid import from train_vit_counter
 class ReceiptDataset(Dataset):
-    def __init__(self, csv_file, img_dir, transform=None):
+    def __init__(self, csv_file, img_dir, transform=None, binary=False):
         self.data = pd.read_csv(csv_file)
         self.img_dir = img_dir
         self.root_dir = os.path.dirname(self.img_dir)
+        self.binary = binary  # Flag for binary classification
         
-        # No transform dependency - using simple resize and normalization
-        self.image_size = 224  # Standard size for ViT and Swin models
-        # ImageNet mean and std for normalization
-        self.mean = np.array([0.485, 0.456, 0.406])
-        self.std = np.array([0.229, 0.224, 0.225])
+        # Get configuration
+        config = get_config()
+        
+        # No transform dependency - using simple resize and normalization from config
+        self.image_size = config.get_model_param("image_size", 224)
+        # Get normalization parameters from config
+        self.mean = np.array(config.get_model_param("normalization_mean", [0.485, 0.456, 0.406]))
+        self.std = np.array(config.get_model_param("normalization_std", [0.229, 0.224, 0.225]))
         
         # Print the first few file names in the dataset
         print(f"First few files in dataset: {self.data.iloc[:5, 0].tolist()}")
         print(f"Checking for image files in: {self.img_dir} and parent dir")
+        if binary:
+            print("Using binary classification mode (0 vs 1+ receipts)")
 
     def __len__(self):
         return len(self.data)
@@ -69,9 +75,16 @@ class ReceiptDataset(Dataset):
         # Convert to tensor in CxHxW format
         image_tensor = torch.tensor(image_np).permute(2, 0, 1)
 
-        # Receipt count as target class (0-5)
+        # Receipt count as target class
         count = int(self.data.iloc[idx, 1])
-        return image_tensor, torch.tensor(count, dtype=torch.long)
+        
+        if self.binary:
+            # Convert to binary classification (0 vs 1+ receipts)
+            binary_label = 1 if count > 0 else 0
+            return image_tensor, torch.tensor(binary_label, dtype=torch.long)
+        else:
+            # Original multiclass classification (0-5)
+            return image_tensor, torch.tensor(count, dtype=torch.long)
 
 def validate(model, dataloader, criterion, device):
     """Validate the model on a validation set for classification task."""
@@ -150,7 +163,7 @@ def validate(model, dataloader, criterion, device):
     
     return val_loss / len(dataloader), accuracy, balanced_accuracy, all_preds, all_targets
 
-def evaluate_model(model_path, test_csv, test_dir, batch_size=16, output_dir="evaluation_vit", config_path=None):
+def evaluate_model(model_path, test_csv, test_dir, batch_size=16, output_dir="evaluation_vit", config_path=None, binary=False):
     """
     Evaluate a trained ViT receipt counter model on test data.
     
@@ -161,6 +174,7 @@ def evaluate_model(model_path, test_csv, test_dir, batch_size=16, output_dir="ev
         batch_size: Batch size for evaluation
         output_dir: Directory to save evaluation results
         config_path: Path to configuration JSON file (optional)
+        binary: If True, use binary classification (0 vs 1+ receipts)
     """
     
     # Load configuration
@@ -172,8 +186,16 @@ def evaluate_model(model_path, test_csv, test_dir, batch_size=16, output_dir="ev
             print(f"Warning: Configuration file not found: {config_path}")
             print("Using default configuration")
     
+    # Set binary mode if specified
+    if binary:
+        config.set_binary_mode(True)
+        print("Using binary classification mode (0 vs 1+ receipts)")
+    else:
+        config.set_binary_mode(False)
+    
     print(f"Using class distribution: {config.class_distribution}")
     print(f"Using calibration factors: {config.calibration_factors}")
+    
     # Create output directory
     os.makedirs(output_dir, exist_ok=True)
     
@@ -245,8 +267,10 @@ def evaluate_model(model_path, test_csv, test_dir, batch_size=16, output_dir="ev
     model.eval()
     
     # Initialize dataset and loader
-    test_dataset = ReceiptDataset(test_csv, test_dir)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
+    test_dataset = ReceiptDataset(test_csv, test_dir, binary=binary)
+    # Get num_workers from config
+    num_workers = config.get_model_param("num_workers", 4)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
     
     # Evaluation
     print("Evaluating ViT model...")
@@ -404,6 +428,8 @@ def main():
                        help="Directory to save evaluation results")
     parser.add_argument("--config", 
                        help="Path to configuration JSON file")
+    parser.add_argument("--binary", action="store_true",
+                       help="Evaluate as binary classification (multiple receipts or not)")
                        
     args = parser.parse_args()
     
@@ -424,7 +450,7 @@ def main():
     evaluate_model(
         model_path, args.test_csv, args.test_dir,
         batch_size=args.batch_size, output_dir=args.output_dir,
-        config_path=args.config
+        config_path=args.config, binary=args.binary
     )
 
 if __name__ == "__main__":
