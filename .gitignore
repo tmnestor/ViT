@@ -13,9 +13,9 @@
 !*.md
 !*.txt
 
-# Include receipt_collages directory and its contents
-!receipt_collages/
-!receipt_collages/*.jpg
+# Include test_images directory and its contents
+!test_images/
+!test_images/*.jpg
 
 # Exclude model files (keep directory structure with .gitkeep)
 models/*.pth

@@ -167,8 +167,7 @@ def evaluate_model(model_path, test_csv, test_dir, batch_size=16, output_dir="ev
     config = get_config()
     if config_path:
         if os.path.exists(config_path):
-            config.load_from_file(config_path)
-            print(f"Loaded configuration from {config_path}")
+            config.load_from_file(config_path, silent=False)  # Explicitly show this load
         else:
             print(f"Warning: Configuration file not found: {config_path}")
             print("Using default configuration")

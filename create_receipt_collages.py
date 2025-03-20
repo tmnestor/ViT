@@ -193,8 +193,7 @@ def main():
         if not os.path.exists(args.config):
             print(f"Warning: Configuration file not found: {args.config}")
         else:
-            config.load_from_file(args.config)
-            print(f"Loaded configuration from {args.config}")
+            config.load_from_file(args.config, silent=False)  # Explicitly show this load
     
     # Parse probability distribution (command line args override config)
     if args.count_probs:

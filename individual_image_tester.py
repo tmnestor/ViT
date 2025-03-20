@@ -24,8 +24,7 @@ def process_image(model_path, image_path, enhance=True, config_path=None):
     # Load configuration
     config = get_config()
     if config_path:
-        config.load_from_file(config_path)
-        print(f"Loaded configuration from {config_path}")
+        config.load_from_file(config_path, silent=False)  # Explicitly show this load
     
     # Determine device (support CUDA, MPS, and CPU)
     if torch.cuda.is_available():
@@ -43,10 +42,11 @@ def process_image(model_path, image_path, enhance=True, config_path=None):
     model_type = "vit" if "vit" in model_path.lower() else "swin"
     
     try:
+        # Load models using the dynamic number of classes from config
         if model_type == "vit":
-            model = load_vit_model(model_path, num_classes=6)
+            model = load_vit_model(model_path)
         else:
-            model = load_swin_model(model_path, num_classes=6)
+            model = load_swin_model(model_path)
         model = model.to(device)
         model.eval()
     except Exception as e:

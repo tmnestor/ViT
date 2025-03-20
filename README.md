@@ -198,13 +198,13 @@ For the receipt counting task, both metrics provide valuable insights. Balanced 
 
 ```bash
 # Test Swin-Tiny model on a single image with default configuration
-python individual_image_tester.py --image receipt_collages/collage_280_2_receipts.jpg --model models/receipt_counter_swin_best.pth 
+python individual_image_tester.py --image receipt_collages/collage_014_2_receipts.jpg --model models/receipt_counter_swin_best.pth 
 
 # Test ViT-Base model with a custom configuration file
-python individual_image_tester.py --image test_images/1000-receipt.jpg --model models/receipt_counter_vit_best.pth --config custom_config.json
+python individual_image_tester.py --image test_images/collage_014_2_receipts.jpg --model models/receipt_counter_vit_best.pth --config custom_config.json
 
 # Test with different model variants (best balanced accuracy, best F1)
-python individual_image_tester.py --image test_images/1000-receipt.jpg --model models/receipt_counter_vit_best_f1.pth
+python individual_image_tester.py --image test_images/collage_014_2_receipts.jpg --model models/receipt_counter_vit_best_f1.pth
 ```
 
 ## Hardware Acceleration
@@ -256,8 +256,7 @@ The configuration system uses a JSON file for defining class distribution and ca
 
 ```json
 {
-  "class_distribution": [0.3, 0.2, 0.2, 0.1, 0.1, 0.1],
-  "calibration_factors": [1.0, 1.0, 0.7, 0.6, 0.55, 0.5]
+  "class_distribution": [0.3, 0.2, 0.2, 0.1, 0.1, 0.1]
 }
 ```
 

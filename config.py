@@ -32,10 +32,10 @@ class Config:
         # Initialize with defaults
         self.class_distribution = DEFAULT_CLASS_DISTRIBUTION.copy()
         
-        # Load from config file if it exists
+        # Load from config file if it exists, silently during initialization
         config_path = os.environ.get("RECEIPT_CONFIG_PATH", "receipt_config.json")
         if os.path.exists(config_path):
-            self.load_from_file(config_path)
+            self.load_from_file(config_path, silent=True)
 
         # Environment variables override file settings
         self._load_from_env()
@@ -61,8 +61,13 @@ class Config:
         # We no longer need to load calibration factors from environment variables
         # as they will be automatically derived from class distribution
 
-    def load_from_file(self, config_path):
-        """Load configuration from a JSON file."""
+    def load_from_file(self, config_path, silent=False):
+        """Load configuration from a JSON file.
+        
+        Args:
+            config_path: Path to the configuration file
+            silent: If True, don't print a message when loading config
+        """
         try:
             with open(config_path, "r") as f:
                 config_data = json.load(f)
@@ -77,10 +82,13 @@ class Config:
             # as they will be automatically derived from class distribution
 
             self._update_derived_values()
-            print(f"Loaded configuration from {config_path}")
+            
+            if not silent:
+                print(f"Loaded configuration from {config_path}")
 
         except Exception as e:
-            print(f"Error loading config from {config_path}: {e}")
+            if not silent:
+                print(f"Error loading config from {config_path}: {e}")
 
     def save_to_file(self, config_path):
         """Save current configuration to a JSON file."""

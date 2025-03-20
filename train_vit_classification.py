@@ -493,8 +493,7 @@ def main():
     if args.config:
         if not os.path.exists(args.config):
             raise FileNotFoundError(f"Configuration file not found: {args.config}")
-        config.load_from_file(args.config)
-        print(f"Loaded configuration from {args.config}")
+        config.load_from_file(args.config, silent=False)  # Explicitly show this load
     
     # Override class distribution if provided
     if args.class_dist:
