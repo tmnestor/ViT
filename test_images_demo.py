@@ -7,7 +7,7 @@ from PIL import Image
 import torch
 from torchvision import transforms
 from receipt_processor import ReceiptProcessor
-from receipt_counter import ReceiptCounter
+from transformer_swin import create_swin_transformer, load_swin_model
 
 def show_sample_images(image_dir, num_samples=4):
     """Display a grid of sample images from the test directory."""
@@ -68,7 +68,7 @@ def process_multiple_images(model_path, image_dir, num_samples=4):
     # Load model
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     try:
-        model = ReceiptCounter.load(model_path).to(device)
+        model = load_swin_model(model_path).to(device)
         processor = ReceiptProcessor()
     except Exception as e:
         print(f"Error loading model: {e}")
@@ -88,20 +88,30 @@ def process_multiple_images(model_path, image_dir, num_samples=4):
             
             # Make prediction
             with torch.no_grad():
-                predicted_count = model.predict(img_tensor)
+                outputs = model(img_tensor)
+                # Get logits from model outputs
+                if hasattr(outputs, 'logits'):
+                    logits = outputs.logits
+                else:
+                    logits = outputs
+                
+                # Get class prediction (0-5)
+                probs = torch.nn.functional.softmax(logits, dim=1)
+                predicted_class = torch.argmax(logits, dim=1).item()
+                confidence = probs[0, predicted_class].item()
             
-            # Round to nearest integer
-            count = round(predicted_count)
+            # The predicted class is directly the count (0-5)
+            count = predicted_class
             
             # Display results
             img = Image.open(img_path)
             axes[i].imshow(img)
-            axes[i].set_title(f"Detected {count} receipts\nRaw: {predicted_count:.2f}")
+            axes[i].set_title(f"Detected {count} receipts\nConfidence: {confidence:.2%}")
             axes[i].axis('off')
             
             print(f"Image: {os.path.basename(img_path)}")
             print(f"  Detected {count} receipts")
-            print(f"  Raw prediction: {predicted_count:.2f}")
+            print(f"  Confidence: {confidence:.2%}")
             
         except Exception as e:
             print(f"Error processing {img_path}: {e}")

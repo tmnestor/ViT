@@ -8,18 +8,20 @@ import pandas as pd
 import numpy as np
 import argparse
 import matplotlib.pyplot as plt
-from vit_counter import ViTReceiptCounter
+from transformer_vit import create_vit_transformer, save_model
 from receipt_processor import ReceiptProcessor
 from tqdm import tqdm
 from sklearn.metrics import confusion_matrix, classification_report
+from config import get_config
 
 
 # Custom dataset for receipt counting (as classification)
 class ReceiptDataset(Dataset):
-    def __init__(self, csv_file, img_dir, transform=None):
+    def __init__(self, csv_file, img_dir, transform=None, augment=False):
         self.data = pd.read_csv(csv_file)
         self.img_dir = img_dir
-        self.transform = transform or ReceiptProcessor().transform
+        # Default to augmented transform for training, standard for evaluation
+        self.transform = transform or ReceiptProcessor(augment=augment).transform
 
     def __len__(self):
         return len(self.data)
@@ -43,8 +45,14 @@ def validate(model, dataloader, criterion, device):
     val_loss = 0.0
     correct = 0
     total = 0
-    class_correct = {i: 0 for i in range(6)}  # 0-5 receipts
-    class_total = {i: 0 for i in range(6)}    # 0-5 receipts
+    
+    # Get number of classes from config
+    from config import get_config
+    config = get_config()
+    num_classes = len(config.class_distribution)
+    
+    class_correct = {i: 0 for i in range(num_classes)}
+    class_total = {i: 0 for i in range(num_classes)}
     
     all_preds = []
     all_targets = []
@@ -52,12 +60,24 @@ def validate(model, dataloader, criterion, device):
     with torch.no_grad():
         for images, targets in dataloader:
             images, targets = images.to(device), targets.to(device)
+            
+            # Hugging Face models return an output object with logits
             outputs = model(images)
-            loss = criterion(outputs, targets)
+            
+            # Handle different model output formats
+            if hasattr(outputs, 'logits'):
+                # HuggingFace transformer model output
+                logits = outputs.logits
+                loss = criterion(logits, targets)
+                _, predicted = torch.max(logits, 1)
+            else:
+                # Standard PyTorch model output
+                loss = criterion(outputs, targets)
+                _, predicted = torch.max(outputs.data, 1)
+
             val_loss += loss.item()
 
             # Calculate accuracy
-            _, predicted = torch.max(outputs.data, 1)
             batch_size = targets.size(0)
             total += batch_size
             correct += (predicted == targets).sum().item()
@@ -78,36 +98,47 @@ def validate(model, dataloader, criterion, device):
     
     # Class-balanced accuracy
     class_accuracies = []
-    for cls in range(6):
+    for cls in range(num_classes):
         if class_total[cls] > 0:
             cls_acc = class_correct[cls] / class_total[cls]
             class_accuracies.append(cls_acc)
     
     balanced_accuracy = np.mean(class_accuracies) if class_accuracies else 0
     
+    # Calculate F1 macro score
+    from sklearn.metrics import f1_score
+    f1_macro = f1_score(all_targets, all_preds, average='macro')
+    
     # Debug information
     print("\nClassification Report:")
-    for cls in range(6):
+    for cls in range(num_classes):
         if class_total[cls] > 0:
             cls_acc = class_correct[cls] / class_total[cls]
             print(f"  Class {cls}: {class_correct[cls]}/{class_total[cls]} ({cls_acc:.2%})")
     
+    print(f"F1 Macro: {f1_macro:.4f}")
+    
     # Create confusion matrix
-    conf_matrix = np.zeros((6, 6), dtype=int)
+    conf_matrix = np.zeros((num_classes, num_classes), dtype=int)
     for pred, target in zip(all_preds, all_targets):
         conf_matrix[int(target), int(pred)] += 1
     
     print("\nConfusion Matrix:")
-    print("  " + " ".join(f"{i:4d}" for i in range(6)))
-    for i in range(6):
-        print(f"{i} {' '.join(f'{conf_matrix[i, j]:4d}' for j in range(6))}")
+    print("  " + " ".join(f"{i:4d}" for i in range(num_classes)))
+    for i in range(num_classes):
+        print(f"{i} {' '.join(f'{conf_matrix[i, j]:4d}' for j in range(num_classes))}")
 
-    return val_loss / len(dataloader), accuracy, balanced_accuracy, all_preds, all_targets
+    return val_loss / len(dataloader), accuracy, balanced_accuracy, f1_macro, all_preds, all_targets
 
 
 def plot_results(predictions, ground_truth, output_path="classification_results.png"):
     """Plot confusion matrix and classification results."""
     plt.figure(figsize=(12, 10))
+    
+    # Get number of classes from config
+    from config import get_config
+    config = get_config()
+    num_classes = len(config.class_distribution)
     
     # Confusion matrix
     cm = confusion_matrix(ground_truth, predictions)
@@ -115,7 +146,7 @@ def plot_results(predictions, ground_truth, output_path="classification_results.
     plt.title('Confusion Matrix')
     plt.colorbar()
     
-    classes = ['0', '1', '2', '3', '4', '5']
+    classes = [str(i) for i in range(num_classes)]
     tick_marks = np.arange(len(classes))
     plt.xticks(tick_marks, classes)
     plt.yticks(tick_marks, classes)
@@ -181,15 +212,15 @@ def train_model(
         device = torch.device("cpu")
     print(f"Using device: {device}")
 
-    # Initialize training dataset and loader
-    train_dataset = ReceiptDataset(train_csv, train_dir)
+    # Initialize training dataset and loader with augmentation
+    train_dataset = ReceiptDataset(train_csv, train_dir, augment=True)
     train_loader = DataLoader(
         train_dataset, batch_size=batch_size, shuffle=True, num_workers=4
     )
 
-    # Initialize validation dataset and loader if provided
+    # Initialize validation dataset and loader if provided (no augmentation)
     if val_csv and val_dir:
-        val_dataset = ReceiptDataset(val_csv, val_dir)
+        val_dataset = ReceiptDataset(val_csv, val_dir, augment=False)
         val_loader = DataLoader(
             val_dataset, batch_size=batch_size, shuffle=False, num_workers=4
         )
@@ -198,28 +229,51 @@ def train_model(
         )
     else:
         # Create a validation split from training data
-        train_size = int(0.8 * len(train_dataset))
-        val_size = len(train_dataset) - train_size
-        train_subset, val_subset = torch.utils.data.random_split(
-            train_dataset, [train_size, val_size]
-        )
-
+        train_data_with_aug = ReceiptDataset(train_csv, train_dir, augment=True)  # With augmentation
+        val_data_no_aug = ReceiptDataset(train_csv, train_dir, augment=False)  # No augmentation
+        
+        train_size = int(0.8 * len(train_data_with_aug))
+        val_size = len(train_data_with_aug) - train_size
+        
+        # Use the same indices for both datasets to maintain consistency
+        indices = torch.randperm(len(train_data_with_aug)).tolist()
+        train_indices = indices[:train_size]
+        val_indices = indices[train_size:]
+        
+        # Create subset samplers
+        train_sampler = torch.utils.data.SubsetRandomSampler(train_indices)
+        val_sampler = torch.utils.data.SubsetRandomSampler(val_indices)
+        
+        # Create data loaders with appropriate samplers
         train_loader = DataLoader(
-            train_subset, batch_size=batch_size, shuffle=True, num_workers=4
+            train_data_with_aug, batch_size=batch_size, sampler=train_sampler, num_workers=4
         )
         val_loader = DataLoader(
-            val_subset, batch_size=batch_size, shuffle=False, num_workers=4
+            val_data_no_aug, batch_size=batch_size, sampler=val_sampler, num_workers=4
         )
         print(
             f"Split {len(train_dataset)} samples into {train_size} training and {val_size} validation"
         )
 
-    # Initialize model as classification model
-    model = ViTReceiptCounter(pretrained=True, num_classes=6).to(device)
-    print("Initialized ViT-Base model for receipt counting (classification)")
+    # Initialize model as classification model using Hugging Face implementation
+    model = create_vit_transformer(pretrained=True).to(device)
+    print("Initialized ViT-Base model using Hugging Face transformers")
 
     # Loss and optimizer with more robust learning rate control
-    criterion = nn.CrossEntropyLoss()  # Standard classification loss
+    # Get class weights from configuration system
+    config = get_config()
+    print(f"Using class distribution: {config.class_distribution}")
+    print(f"Using calibration factors: {config.calibration_factors}")
+    
+    # Get the normalized and scaled weights tensor for loss function
+    normalized_weights = config.get_class_weights_tensor(device)
+    print(f"Using class weights: {normalized_weights}")
+    
+    # Use label smoothing (0.1) along with class weights to improve generalization
+    criterion = nn.CrossEntropyLoss(
+        weight=normalized_weights,
+        label_smoothing=0.1  # Add label smoothing to help with overfitting
+    )  # Weighted classification loss with smoothing
     optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=0.01)
     
     # Use ReduceLROnPlateau scheduler to reduce LR when validation metrics plateau
@@ -234,12 +288,13 @@ def train_model(
     )
 
     # Training metrics
-    history = {"train_loss": [], "val_loss": [], "val_acc": [], "val_balanced_acc": []}
+    history = {"train_loss": [], "val_loss": [], "val_acc": [], "val_balanced_acc": [], "val_f1_macro": []}
 
-    # For early stopping
-    patience = 5
+    # For early stopping - increased patience due to more complex model and augmentation
+    patience = 8  # Increased from 5 to give model more time to converge
     patience_counter = 0
     best_balanced_acc = 0
+    best_f1_macro = 0  # Also track F1 macro improvement
 
     # Training loop
     print(f"Starting training for {epochs} epochs...")
@@ -256,7 +311,13 @@ def train_model(
 
             # Forward pass
             outputs = model(images)
-            loss = criterion(outputs, targets)
+            
+            # HuggingFace models return an object with logits
+            if hasattr(outputs, 'logits'):
+                logits = outputs.logits
+                loss = criterion(logits, targets)
+            else:
+                loss = criterion(outputs, targets)
 
             # Backward pass and optimize
             loss.backward()
@@ -277,26 +338,43 @@ def train_model(
         history["train_loss"].append(train_loss)
 
         # Validate
-        val_loss, val_acc, val_balanced_acc, predictions, ground_truth = validate(
+        val_loss, val_acc, val_balanced_acc, val_f1_macro, predictions, ground_truth = validate(
             model, val_loader, criterion, device
         )
         history["val_loss"].append(val_loss)
         history["val_acc"].append(val_acc)
         history["val_balanced_acc"].append(val_balanced_acc)
+        history["val_f1_macro"].append(val_f1_macro)
 
         print(
             f"Epoch {epoch + 1}/{epochs}, Train Loss: {train_loss:.4f}, "
-            f"Val Loss: {val_loss:.4f}, Accuracy: {val_acc:.2%}, Balanced Accuracy: {val_balanced_acc:.2%}"
+            f"Val Loss: {val_loss:.4f}, Accuracy: {val_acc:.2%}, Balanced Accuracy: {val_balanced_acc:.2%}, "
+            f"F1 Macro: {val_f1_macro:.2%}"
         )
         
         # Update learning rate scheduler based on balanced accuracy
         scheduler.step(val_balanced_acc)
 
-        # Save model on improvement
+        # Save model on improvement (considering both balanced accuracy and F1 macro)
+        improved = False
+        
+        # Save based on balanced accuracy improvement
         if val_balanced_acc > best_balanced_acc:
             best_balanced_acc = val_balanced_acc
-            model.save(os.path.join(output_dir, "receipt_counter_vit_best.pth"))
-            print(f"Saved best model with balanced accuracy: {val_balanced_acc:.2%}")
+            save_model(model, os.path.join(output_dir, "receipt_counter_vit_best_bacc.pth"))
+            print(f"Saved model with best balanced accuracy: {val_balanced_acc:.2%}")
+            improved = True
+            
+        # Also save based on F1 macro improvement
+        if val_f1_macro > best_f1_macro:
+            best_f1_macro = val_f1_macro
+            save_model(model, os.path.join(output_dir, "receipt_counter_vit_best_f1.pth"))
+            print(f"Saved model with best F1 macro: {val_f1_macro:.2%}")
+            improved = True
+        
+        # Get a comprehensive best model (saves over the above models)
+        if improved:
+            save_model(model, os.path.join(output_dir, "receipt_counter_vit_best.pth"))
             patience_counter = 0
         else:
             patience_counter += 1
@@ -305,10 +383,10 @@ def train_model(
                 break
 
     # Save final model
-    model.save(os.path.join(output_dir, "receipt_counter_vit_final.pth"))
+    save_model(model, os.path.join(output_dir, "receipt_counter_vit_final.pth"))
 
     # Generate validation plots
-    _, _, _, predictions, ground_truth = validate(model, val_loader, criterion, device)
+    _, _, _, f1_macro, predictions, ground_truth = validate(model, val_loader, criterion, device)
     accuracy, balanced_accuracy = plot_results(
         predictions,
         ground_truth,
@@ -321,21 +399,34 @@ def train_model(
     )
 
     # Plot training curves
-    plt.figure(figsize=(12, 4))
+    plt.figure(figsize=(15, 8))
 
-    plt.subplot(1, 2, 1)
+    # Loss plot
+    plt.subplot(1, 3, 1)
     plt.plot(history["train_loss"], label="Train Loss")
     plt.plot(history["val_loss"], label="Val Loss")
     plt.xlabel("Epoch")
     plt.ylabel("Loss")
+    plt.title("Training and Validation Loss")
     plt.legend()
     plt.grid(True, alpha=0.3)
 
-    plt.subplot(1, 2, 2)
+    # Accuracy plot
+    plt.subplot(1, 3, 2)
     plt.plot(history["val_acc"], label="Accuracy")
     plt.plot(history["val_balanced_acc"], label="Balanced Accuracy")
     plt.xlabel("Epoch")
     plt.ylabel("Accuracy")
+    plt.title("Accuracy Metrics")
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    
+    # F1 macro plot
+    plt.subplot(1, 3, 3)
+    plt.plot(history["val_f1_macro"], label="F1 Macro", color="green")
+    plt.xlabel("Epoch")
+    plt.ylabel("F1 Score")
+    plt.title("F1 Macro Score")
     plt.legend()
     plt.grid(True, alpha=0.3)
 
@@ -375,7 +466,7 @@ def main():
         help="Directory containing validation images",
     )
     parser.add_argument(
-        "--epochs", type=int, default=20, help="Number of training epochs"
+        "--epochs", type=int, default=30, help="Number of training epochs (default: 30)"
     )
     parser.add_argument(
         "--batch_size", type=int, default=16, help="Batch size for training"
@@ -386,8 +477,36 @@ def main():
         default="models",
         help="Directory to save trained model and results",
     )
+    parser.add_argument(
+        "--config",
+        help="Path to configuration JSON file with class distribution and calibration factors",
+    )
+    parser.add_argument(
+        "--class_dist", 
+        help="Comma-separated class distribution (e.g., '0.3,0.2,0.2,0.1,0.1,0.1')"
+    )
 
     args = parser.parse_args()
+
+    # Load configuration if provided
+    config = get_config()
+    if args.config:
+        if not os.path.exists(args.config):
+            raise FileNotFoundError(f"Configuration file not found: {args.config}")
+        config.load_from_file(args.config)
+        print(f"Loaded configuration from {args.config}")
+    
+    # Override class distribution if provided
+    if args.class_dist:
+        try:
+            dist = [float(x) for x in args.class_dist.split(',')]
+            if len(dist) != 6:
+                raise ValueError("Class distribution must have exactly 6 values")
+            config.update_class_distribution(dist)
+            print(f"Using custom class distribution: {dist}")
+        except Exception as e:
+            print(f"Error parsing class distribution: {e}")
+            print("Using default class distribution")
 
     # Validate that files exist
     if not os.path.exists(args.train_csv):

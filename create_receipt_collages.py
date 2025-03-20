@@ -4,6 +4,7 @@ import argparse
 import numpy as np
 from PIL import Image, ImageOps, ImageDraw
 from tqdm import tqdm
+from config import get_config
 
 def create_receipt_collage(image_paths, canvas_size=(1600, 1200), receipt_count=None, 
                         bg_color=(245, 245, 245), realistic=True):
@@ -176,27 +177,50 @@ def main():
                         help="Width of the collage canvas")
     parser.add_argument("--canvas_height", type=int, default=1200,
                         help="Height of the collage canvas")
-    parser.add_argument("--count_probs", type=str, default="0.3,0.2,0.2,0.1,0.1,0.1",
-                      help="Comma-separated probabilities for 0,1,2,3,4,5 receipts")
+    parser.add_argument("--count_probs", type=str, 
+                      help="Comma-separated probabilities for 0,1,2,3,4,5 receipts (overrides config)")
     parser.add_argument("--realistic", action="store_true", default=True,
                       help="Make receipts blend with background for more realistic appearance")
     parser.add_argument("--bg_color", type=str, default="245,245,245",
                       help="Background color in RGB format (e.g., '245,245,245' for light gray)")
+    parser.add_argument("--config", help="Path to configuration JSON file")
     
     args = parser.parse_args()
     
-    # Parse probability distribution
-    try:
-        count_probs = [float(p) for p in args.count_probs.split(',')]
-        # Normalize to ensure they sum to 1
-        prob_sum = sum(count_probs)
-        if prob_sum <= 0:
-            raise ValueError("Probabilities must sum to a positive value")
-        count_probs = [p / prob_sum for p in count_probs]
-        print(f"Using receipt count distribution: {count_probs}")
-    except (ValueError, AttributeError) as e:
-        print(f"Warning: Invalid probability format, using default distribution: {e}")
-        count_probs = [0.3, 0.2, 0.2, 0.1, 0.1, 0.1]
+    # Load configuration
+    config = get_config()
+    if args.config:
+        if not os.path.exists(args.config):
+            print(f"Warning: Configuration file not found: {args.config}")
+        else:
+            config.load_from_file(args.config)
+            print(f"Loaded configuration from {args.config}")
+    
+    # Parse probability distribution (command line args override config)
+    if args.count_probs:
+        try:
+            count_probs = [float(p) for p in args.count_probs.split(',')]
+            # Normalize to ensure they sum to 1
+            prob_sum = sum(count_probs)
+            if prob_sum <= 0:
+                raise ValueError("Probabilities must sum to a positive value")
+            count_probs = [p / prob_sum for p in count_probs]
+            print(f"Using receipt count distribution from command line: {count_probs}")
+        except (ValueError, AttributeError) as e:
+            print(f"Warning: Invalid probability format in command line: {e}")
+            count_probs = config.class_distribution
+            print(f"Using class distribution from config: {count_probs}")
+    else:
+        # Use distribution from config if not specified on command line
+        count_probs = config.class_distribution
+        print(f"Using class distribution from config: {count_probs}")
+        
+    # Optionally, save the used distribution back to the configuration
+    if not args.count_probs:
+        config.update_class_distribution(count_probs)
+        if args.config:
+            config.save_to_file(args.config)
+            print(f"Updated configuration saved to {args.config}")
     
     # Create output directory if it doesn't exist
     os.makedirs(args.output_dir, exist_ok=True)
