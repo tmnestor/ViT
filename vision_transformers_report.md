@@ -10,14 +10,14 @@ This report compares two vision transformer architectures—ViT-Base (86M parame
 - **Patch Size**: 16×16 pixels
 - **Attention Mechanism**: Global self-attention across all patches
 - **Positional Encoding**: 1D positional embeddings
-- **PyTorch Implementation**: `torchvision.models.vit_b_16` (pretrained on ImageNet-1K)
+- **Implementation**: Hugging Face Transformers `google/vit-base-patch16-224` (pretrained on ImageNet-1K)
 
 ### Swin-Tiny (28M parameters)
 - **Architecture**: Hierarchical Transformer with 4 stages, shifted windows
 - **Patch Size**: 4×4 pixels initially, with hierarchical merging
 - **Attention Mechanism**: Local self-attention within windows, with cross-window connections
 - **Positional Encoding**: Relative position bias
-- **PyTorch Implementation**: `torchvision.models.swin_t` (pretrained on ImageNet-1K)
+- **Implementation**: Hugging Face Transformers `microsoft/swin-tiny-patch4-window7-224` (pretrained on ImageNet-1K)
 
 ## Experimental Setup
 

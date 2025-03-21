@@ -36,6 +36,9 @@ DEFAULT_MODEL_PARAMS = {
     "min_lr": 1e-6,
     "gradient_clip_value": 1.0,
     "early_stopping_patience": 8,
+    # Reproducibility parameters
+    "random_seed": 42,
+    "deterministic_mode": True,
 }
 
 # Calibration factors will be derived from class distribution automatically

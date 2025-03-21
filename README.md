@@ -2,6 +2,15 @@
 
 A computer vision project comparing Vision Transformer architectures (Swin-Tiny and ViT-Base) for counting receipts in images.
 
+## Latest Updates
+
+- **Differential Learning Rates**: Implemented separate learning rates for pretrained backbone and classifier head
+- **Modern Path Handling**: Replaced `os.path` with Python's `pathlib.Path` across the codebase for more readable and robust path operations
+- **Reproducibility Module**: Added `reproducibility.py` with seed control functions for consistent results across runs
+- **Improved CLI**: Enhanced command-line interfaces with argument groups and shorthand options
+- **Unified Training**: Consistent interfaces between Swin and ViT training scripts
+- **Model Factory Pattern**: Added ModelFactory for centralized model creation, loading and saving
+
 ## Mathematical Formulation of Metrics, Weights, and Calibration
 
 ### Classification Metrics
@@ -134,9 +143,15 @@ pip install -r requirements.txt
 ## Project Structure
 
 - **Core Model Files:**
-  - `transformer_swin.py` - Swin-Tiny transformer model implementation
-  - `transformer_vit.py` - ViT-Base transformer model implementation
+  - `model_factory.py` - Factory pattern for creating and loading models
+  - `transformer_swin.py` - Swin-Tiny transformer implementation (legacy)
+  - `transformer_vit.py` - ViT-Base transformer implementation (legacy)
   - `receipt_processor.py` - Image preprocessing utilities
+  - `config.py` - Centralized configuration system
+
+- **Unified Dataset & Training Modules:**
+  - `datasets.py` - Unified dataset classes for ViT and Swin models
+  - `training_utils.py` - Shared training, validation, and evaluation utilities
 
 - **Data Generation & Preparation:**
   - `create_receipt_collages.py` - Generate synthetic receipt collages on table surfaces
@@ -144,14 +159,14 @@ pip install -r requirements.txt
   - `download_test_images.py` - Utility to download/process SRD receipt dataset
 
 - **Training & Evaluation:**
-  - `train_swin_classification.py` - Train the Swin-Tiny receipt counter using classification (0-5 classes)
-  - `train_vit_classification.py` - Train the ViT-Base receipt counter using classification (0-5 classes)
-  - `evaluate_swin_counter.py` - Evaluate Swin-Tiny model performance with metrics
-  - `evaluate_vit_counter.py` - Evaluate ViT-Base model performance with metrics
-  - `demo.py` - Process individual images through the trained model
+  - `train_swin_classification.py` - Train the Swin-Tiny receipt counter
+  - `train_vit_classification.py` - Train the ViT-Base receipt counter
+  - `evaluate_swin_counter.py` - Evaluate Swin-Tiny model performance
+  - `evaluate_vit_counter.py` - Evaluate ViT-Base model performance
+  - `individual_image_tester.py` - Process individual images through trained models
 
 - **Additional Utilities:**
-  - `torchvision_demo.py` - Demo of pre-trained ViT from torchvision
+  - `simple_receipt_counter.py` - Simplified model for quick testing
   - `batch_processor.py` - Batch processing utilities
   - `test_images_demo.py` - Testing with multiple sample images
 
@@ -204,7 +219,7 @@ The SRD dataset requires manual download due to access restrictions. The script 
 python train_swin_classification.py --train_csv receipt_dataset/train.csv --train_dir receipt_dataset/train \
                            --val_csv receipt_dataset/val.csv --val_dir receipt_dataset/val \
                            --epochs 20 --batch_size 32 --output_dir models \
-                           --lr 5e-5
+                           --lr 5e-4 --backbone_lr_multiplier 0.02
 
 # Train with custom class distribution
 python train_swin_classification.py --train_csv receipt_dataset/train.csv --train_dir receipt_dataset/train \
@@ -222,38 +237,52 @@ python train_vit_classification.py --train_csv receipt_dataset/train.csv --train
                           --epochs 20 --batch_size 32 --output_dir models \
                           --lr 5e-5
 
+# Train with custom differential learning rates
+python train_vit_classification.py --train_csv receipt_dataset/train.csv --train_dir receipt_dataset/train \
+                          --val_csv receipt_dataset/val.csv --val_dir receipt_dataset/val \
+                          --epochs 30 --batch_size 16 --output_dir models \
+                          --lr 1e-4 --backbone_lr_multiplier 0.05
+
+# Train with gradient clipping and differential learning rates
+python train_swin_classification.py --train_csv receipt_dataset/train.csv --train_dir receipt_dataset/train \
+                           --val_csv receipt_dataset/val.csv --val_dir receipt_dataset/val \
+                           --epochs 20 --batch_size 16 --output_dir models \
+                           --lr 5e-5 --backbone_lr_multiplier 0.1 --grad_clip 2.0
+
 ```
 
 Training generates evaluation metrics, confusion matrices, accuracy plots, and saves models to the `models` directory for both architectures. The classification approach uses a ReduceLROnPlateau scheduler to prevent erratic training behavior.
 
-#### Implementation Guide
+#### Hugging Face Transformers Implementation Details
 
-The training scripts should be modified to use Hugging Face implementations as the default:
+The training scripts utilize Hugging Face transformers with several optimization techniques:
 
 ```python
-# Add to argument parser
-parser.add_argument("--use_torchvision", action="store_true", help="Use torchvision implementation instead of Hugging Face")
-parser.add_argument("--grad_clip", type=float, default=None, help="Apply gradient clipping with specified max norm")
+# Model initialization through our factory pattern
+from model_factory import ModelFactory
 
-# Then in the model initialization section:
-if args.use_torchvision:
-    model = ReceiptCounter(pretrained=True, num_classes=6).to(device)
-    print("Initialized torchvision Swin-Tiny model for receipt counting")
-else:
-    from receipt_counter import create_hf_receipt_counter
-    model = create_hf_receipt_counter(pretrained=True, num_classes=6).to(device)
-    print("Initialized Hugging Face Swin-Tiny model for receipt counting")
+# Create model with the right type (swin or vit)
+model = ModelFactory.create_transformer(model_type="swin", pretrained=True).to(device)
 
-# Later in training loop, add gradient clipping if requested:
-for batch in dataloader:
-    # ... forward pass, loss calculation, etc. ...
+# Training loop with differential learning rates and gradient clipping
+for images, targets in dataloader:
+    # Zero gradients
     optimizer.zero_grad()
+    
+    # Forward pass with Hugging Face model
+    outputs = model(images)
+    logits = outputs.logits  # Hugging Face models return an object with logits
+    
+    # Calculate loss with class weighting
+    loss = criterion(logits, targets)
+    
+    # Backward pass
     loss.backward()
     
-    # Apply gradient clipping if specified
-    if args.grad_clip is not None:
-        torch.nn.utils.clip_grad_norm_(model.parameters(), args.grad_clip)
-        
+    # Apply gradient clipping to prevent exploding gradients
+    torch.nn.utils.clip_grad_norm_(model.parameters(), gradient_clip_value)
+    
+    # Update with AdamW optimizer (uses different learning rates for backbone vs classifier)
     optimizer.step()
 ```
 
@@ -299,13 +328,13 @@ For the receipt counting task, both metrics provide valuable insights. Balanced 
 
 ```bash
 # Test Swin-Tiny model on a single image with default configuration
-python individual_image_tester.py --image receipt_collages/collage_014_2_receipts.jpg --model models/receipt_counter_swin_best.pth 
+python individual_image_tester.py --image receipt_collages/collage_254_3_receipts.jpg --model models/receipt_counter_swin_best.pth 
 
 # Test ViT-Base model with a custom configuration file
-python individual_image_tester.py --image test_images/collage_014_2_receipts.jpg --model models/receipt_counter_vit_best.pth --config custom_config.json
+python individual_image_tester.py --image test_images/collage_254_3_receipts.jpg--model models/receipt_counter_vit_best.pth --config custom_config.json
 
 # Test with different model variants (best balanced accuracy, best F1)
-python individual_image_tester.py --image test_images/collage_014_2_receipts.jpg --model models/receipt_counter_vit_best_f1.pth
+python individual_image_tester.py --image test_images/collage_254_3_receipts.jpg --model models/receipt_counter_vit_best_f1.pth
 ```
 
 ## Hardware Acceleration
@@ -315,11 +344,100 @@ This project can utilize hardware acceleration:
 - MPS (Apple Silicon)
 - CPU (fallback)
 
-The code automatically detects and uses the best available device. For Apple Silicon (M1/M2/M3) Mac users, the MPS backend is used with fallback to CPU for operations not supported by MPS.
+The code automatically detects and uses the best available device through the `device_utils` module. For Apple Silicon (M1/M2/M3) Mac users, the MPS backend is used with fallback to CPU for operations not supported by MPS.
+
+### Using the Device Utilities
+
+The project provides device abstraction through the `device_utils.py` module:
+
+```python
+from device_utils import get_device, move_to_device, get_device_info
+
+# Get the best available device
+device = get_device()
+
+# Move model and data to device in one step
+model, data = move_to_device(model, data)
+
+# Get detailed information about the current device
+device_info = get_device_info()
+print(f"Using {device_info['device_type']} with PyTorch {device_info['pytorch_version']}")
+```
+
+This abstraction ensures consistent device handling across the entire codebase and optimizes hardware usage.
+
+### Modern Path Handling
+
+The project uses `pathlib.Path` instead of `os.path` for modern, object-oriented path handling:
+
+```python
+from pathlib import Path
+
+# Create a path object
+model_dir = Path("models")
+
+# Create directories with parents
+output_path = Path("output/results")
+output_path.mkdir(parents=True, exist_ok=True)
+
+# Join paths with / operator
+model_path = model_dir / "receipt_counter_swin_best.pth"
+
+# Path properties and methods
+if model_path.exists() and model_path.is_file():
+    print(f"Found model: {model_path.name}")
+    print(f"In directory: {model_path.parent}")
+    print(f"File extension: {model_path.suffix}")
+
+# Globbing files
+image_dir = Path("receipt_collages")
+for image_path in image_dir.glob("*.jpg"):
+    print(f"Processing {image_path.stem}")
+
+# Handling paths consistently on all platforms
+csv_path = Path("data") / "train.csv"
+```
+
+The `pathlib` integration improves code readability, portability across operating systems, and reduces errors from string-based path manipulation.
+
+### Reproducibility
+
+The project ensures reproducible results through the `reproducibility.py` module:
+
+```python
+from reproducibility import set_seed, get_reproducibility_info, is_deterministic
+
+# Set random seed from configuration
+seed_info = set_seed()
+print(f"Using seed {seed_info['seed']}, deterministic: {seed_info['deterministic']}")
+
+# Get current reproducibility settings
+repro_info = get_reproducibility_info()
+print(f"PYTHONHASHSEED: {repro_info['python_hashseed']}")
+
+# Check if using deterministic mode
+if is_deterministic():
+    print("Running in deterministic mode (slower but reproducible)")
+else:
+    print("Running in performance mode (faster but not fully reproducible)")
+```
+
+To ensure completely reproducible results:
+
+1. Set a fixed random seed via configuration or command line parameter
+2. Enable deterministic mode
+3. Use a single worker for data loading when using DataLoader
+
+Example usage with command line parameters:
+
+```bash
+# Train with fixed seed, deterministic algorithms, and differential learning rates
+python train_vit_classification.py --seed 42 --deterministic --backbone_lr_multiplier 0.05
+```
 
 ## Model Architectures
 
-The project compares two vision transformer architectures, with implementations available from both Hugging Face Transformers (default) and torchvision (alternative):
+The project compares two vision transformer architectures using Hugging Face Transformers implementations:
 
 ### Swin-Tiny Transformer
 - **Architecture**: Hierarchical vision transformer using shifted windows for efficient processing
@@ -327,10 +445,9 @@ The project compares two vision transformer architectures, with implementations 
 - **Parameters**: ~28 million 
 - **Input Size**: 224x224 pixels
 - **Output**: 6 classes (0-5 receipts)
-- **Loss Function**: Cross Entropy Loss
-- **Optimization**: AdamW with ReduceLROnPlateau scheduler and optional gradient clipping
-- **Implementation Options**:
-  - **Hugging Face (Default)**: `microsoft/swin-tiny-patch4-window7-224` with custom classifier
+- **Loss Function**: Cross Entropy Loss with label smoothing
+- **Optimization**: AdamW with ReduceLROnPlateau scheduler and gradient clipping
+- **Implementation**: Hugging Face `microsoft/swin-tiny-patch4-window7-224` with custom classifier
 
 
 ### ViT-Base Transformer
@@ -339,13 +456,21 @@ The project compares two vision transformer architectures, with implementations 
 - **Parameters**: ~86 million
 - **Input Size**: 224x224 pixels
 - **Output**: 6 classes (0-5 receipts)
-- **Loss Function**: Cross Entropy Loss
-- **Optimization**: AdamW with ReduceLROnPlateau scheduler and optional gradient clipping
-- **Implementation Options**:
-  - **Hugging Face (Default)**: `google/vit-base-patch16-224` with custom classifier
+- **Loss Function**: Cross Entropy Loss with label smoothing
+- **Optimization**: AdamW with ReduceLROnPlateau scheduler and gradient clipping
+- **Implementation**: Hugging Face `google/vit-base-patch16-224` with custom classifier
 
 
-Both models are fine-tuned using the AdamW optimizer with learning rate 5e-5, increased weight decay (0.05), and regularization techniques including BatchNorm and Dropout to prevent overfitting. The ReduceLROnPlateau scheduler with patience=2 and factor=0.5 helps stabilize training and prevent erratic behavior after convergence. Gradient clipping can be applied with the `--grad_clip` parameter when available.
+Both models are fine-tuned using the AdamW optimizer with differential learning rates:
+- **Classifier Head**: Higher learning rate (default: 5e-5) for the randomly initialized classification layers
+- **Backbone**: Lower learning rate (default: 0.1× classifier rate) for the pretrained transformer backbone
+
+This differential learning rate approach is a transfer learning best practice that:
+1. Preserves the valuable pretrained features in the backbone with a gentler learning rate
+2. Allows the new classification head to learn quickly with a higher learning rate
+3. Can be tuned via the `--backbone_lr_multiplier` parameter to optimize performance
+
+Additional optimization techniques include increased weight decay (0.05), BatchNorm and Dropout regularization, and a ReduceLROnPlateau scheduler (patience=2, factor=0.5) to stabilize training. Gradient clipping is applied to prevent exploding gradients.
 
 ## Configuration System
 
@@ -371,6 +496,7 @@ DEFAULT_MODEL_PARAMS = {
     # Training parameters
     "batch_size": 16,
     "learning_rate": 5e-5,
+    "backbone_lr_multiplier": 0.1,
     "weight_decay": 0.01,
     "num_workers": 4,
     "label_smoothing": 0.1,
@@ -392,6 +518,7 @@ export RECEIPT_CLASS_DIST="0.4,0.2,0.2,0.1,0.1"
 export RECEIPT_IMAGE_SIZE="256"
 export RECEIPT_BATCH_SIZE="32" 
 export RECEIPT_LEARNING_RATE="1e-5"
+export RECEIPT_BACKBONE_LR_MULTIPLIER="0.05"
 export RECEIPT_NUM_WORKERS="8"
 export RECEIPT_WEIGHT_DECAY="0.005"
 export RECEIPT_LABEL_SMOOTHING="0.05"
@@ -408,6 +535,9 @@ All core scripts support direct class distribution overrides via command line ar
 # Direct override of class distribution
 python train_vit_classification.py --class_dist "0.25,0.25,0.2,0.1,0.1,0.1"
 
+# Set backbone learning rate multiplier (controls differential learning rates)
+python train_swin_classification.py --backbone_lr_multiplier 0.05
+
 # Set binary mode
 python evaluate_vit_counter.py --model models/receipt_counter_vit_best.pth --binary
 ```
@@ -415,9 +545,11 @@ python evaluate_vit_counter.py --model models/receipt_counter_vit_best.pth --bin
 For more complex configuration, use environment variables:
 
 ```bash
-# Set image size and batch size for training
+# Set image size, batch size and learning rates for training
 export RECEIPT_IMAGE_SIZE=256
 export RECEIPT_BATCH_SIZE=32
+export RECEIPT_LEARNING_RATE=1e-4
+export RECEIPT_BACKBONE_LR_MULTIPLIER=0.05
 export RECEIPT_NUM_WORKERS=8
 python train_vit_classification.py
 
@@ -462,6 +594,7 @@ When exporting to JSON, the configuration looks like this:
     "image_size": 224,
     "batch_size": 16,
     "learning_rate": 5e-5,
+    "backbone_lr_multiplier": 0.1,
     "num_workers": 4,
     "label_smoothing": 0.1,
     "classifier_dims": [768, 512, 256],
@@ -498,6 +631,12 @@ class_prior = config.get_class_prior_tensor(device)
 image_size = config.get_model_param("image_size", 224)
 classifier_dims = config.get_model_param("classifier_dims", [768, 512, 256])
 dropout_rates = config.get_model_param("dropout_rates", [0.4, 0.4, 0.3])
+
+# Get differential learning rate settings
+learning_rate = config.get_model_param("learning_rate", 5e-5)
+backbone_lr_multiplier = config.get_model_param("backbone_lr_multiplier", 0.1)
+backbone_lr = learning_rate * backbone_lr_multiplier
+print(f"Using learning rates - Classifier: {learning_rate}, Backbone: {backbone_lr}")
 
 # To understand the derivation of calibration factors
 explanation = config.explain_calibration()
@@ -624,19 +763,106 @@ This project uses the following vision transformer architectures:
 The project uses implementations from:
 - [Hugging Face Transformers](https://huggingface.co/docs/transformers/index) - Provides state-of-the-art machine learning models for various tasks
 
-## Transformer Module Usage
+## Key Module Usage
 
-The code is designed to use Hugging Face implementations:
+The code has been refactored into several reusable modules with consistent interfaces:
+
+### Model Factory Module
+
+The code uses a unified model factory that handles both ViT and Swin model creation:
 
 ```python
-# Transformer implementations
-from transformer_swin import create_swin_transformer  # Swin-Tiny
-from transformer_vit import create_vit_transformer    # ViT-Base
+# Import the model factory
+from model_factory import ModelFactory
 
-# Loading pre-trained models
-from transformer_swin import load_swin_model
-from transformer_vit import load_vit_model
+# Create models using the factory
+vit_model = ModelFactory.create_transformer(model_type="vit", pretrained=True)
+swin_model = ModelFactory.create_transformer(model_type="swin", pretrained=True)
+
+# Save models
+ModelFactory.save_model(vit_model, "path/to/vit_model.pth")
+ModelFactory.save_model(swin_model, "path/to/swin_model.pth")
+
+# Load models
+loaded_vit = ModelFactory.load_model("path/to/vit_model.pth", model_type="vit")
+loaded_swin = ModelFactory.load_model("path/to/swin_model.pth", model_type="swin")
 ```
+
+Legacy interfaces are still supported for backward compatibility:
+
+```python
+# Legacy transformer interfaces
+from model_factory import create_vit_transformer, create_swin_transformer
+from model_factory import load_vit_model, load_swin_model, save_model
+```
+
+### Unified Dataset Module
+
+A unified dataset module provides consistent data loading for both ViT and Swin models:
+
+```python
+# Import dataset classes
+from datasets import ReceiptDataset, create_data_loaders
+
+# Create data loaders with a single function call
+train_loader, val_loader, num_train, num_val = create_data_loaders(
+    train_csv="receipt_dataset/train.csv",
+    train_dir="receipt_dataset/train",
+    val_csv="receipt_dataset/val.csv",
+    val_dir="receipt_dataset/val",
+    batch_size=32,
+    augment_train=True,
+    binary=False
+)
+```
+
+The dataset module handles:
+- Consistent data loading for both model types
+- Train/validation split when no separate validation set is provided
+- Image augmentation during training
+- Binary or multiclass labels based on configuration
+- Automatic handling of missing files with fallback paths
+
+### Training Utilities Module
+
+A training utilities module provides shared functionality for model training, validation, and evaluation:
+
+```python
+# Import training utilities
+from training_utils import (
+    validate, print_validation_results, plot_confusion_matrix, 
+    plot_training_curves, plot_evaluation_metrics,
+    ModelCheckpoint, EarlyStopping
+)
+
+# Validate model and get metrics dictionary
+metrics = validate(model, dataloader, criterion, device)
+
+# Use model checkpoint with multiple tracked metrics
+checkpoint = ModelCheckpoint(
+    output_dir="models",
+    metrics=["balanced_accuracy", "f1_macro"],
+    mode="max",
+    verbose=True
+)
+checkpoint.check_improvement(metrics, model, model_type="vit")
+
+# Use early stopping with configurable patience
+early_stopping = EarlyStopping(patience=8, mode="max")
+if early_stopping.check_improvement(metrics["balanced_accuracy"]):
+    print("Early stopping triggered")
+
+# Generate evaluation plots
+plot_evaluation_metrics(metrics, output_dir="evaluation")
+```
+
+The training utilities module standardizes:
+- Model validation across different model types
+- Performance metrics calculation
+- Model checkpointing based on multiple metrics
+- Early stopping based on various criteria
+- Visualization of results and training progress
+- Consistent output formats for reuse
 
 ## References
 

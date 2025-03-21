@@ -5,9 +5,9 @@ import random
 from glob import glob
 from PIL import Image
 import torch
-from torchvision import transforms
 from receipt_processor import ReceiptProcessor
-from transformer_swin import create_swin_transformer, load_swin_model
+from model_factory import ModelFactory
+from device_utils import get_device
 
 def show_sample_images(image_dir, num_samples=4):
     """Display a grid of sample images from the test directory."""
@@ -66,12 +66,21 @@ def process_multiple_images(model_path, image_dir, num_samples=4):
     samples = random.sample(image_files, num_samples)
     
     # Load model
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = get_device()
     try:
-        model = load_swin_model(model_path).to(device)
+        # Determine if it's a ViT or Swin model based on filename
+        model_type = "vit" if "vit" in model_path.lower() else "swin"
+        model = ModelFactory.load_model(
+            model_path, 
+            model_type=model_type, 
+            strict=True, 
+            mode="eval"
+        ).to(device)
         processor = ReceiptProcessor()
+        print(f"Successfully loaded {model_type.upper()} model!")
     except Exception as e:
         print(f"Error loading model: {e}")
+        print("Model loading failed. Please ensure the model file exists and is in the correct format.")
         return
     
     # Process images

@@ -3,11 +3,11 @@ import sys
 import os
 import numpy as np
 import matplotlib.pyplot as plt
-from receipt_processor import ReceiptProcessor
-from transformer_swin import create_swin_transformer, load_swin_model
-from transformer_vit import create_vit_transformer, load_vit_model
-from config import get_config
 import torch
+from receipt_processor import ReceiptProcessor
+from model_factory import ModelFactory
+from config import get_config
+from device_utils import get_device
 
 # Try to import OpenCV, but provide helpful error if not installed
 try:
@@ -26,14 +26,8 @@ def process_image(model_path, image_path, enhance=True, config_path=None):
     if config_path:
         config.load_from_file(config_path, silent=False)  # Explicitly show this load
     
-    # Determine device (support CUDA, MPS, and CPU)
-    if torch.cuda.is_available():
-        device = torch.device("cuda")
-    elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-        device = torch.device("mps")
-    else:
-        device = torch.device("cpu")
-    print(f"Using device: {device}")
+    # Get the best available device
+    device = get_device()
     
     # Load model based on model path
     print(f"Loading model from {model_path}...")
@@ -42,13 +36,15 @@ def process_image(model_path, image_path, enhance=True, config_path=None):
     model_type = "vit" if "vit" in model_path.lower() else "swin"
     
     try:
-        # Load models using the dynamic number of classes from config
-        if model_type == "vit":
-            model = load_vit_model(model_path)
-        else:
-            model = load_swin_model(model_path)
+        # Load model using the factory with strict=True
+        model = ModelFactory.load_model(
+            model_path, 
+            model_type=model_type, 
+            strict=True,
+            mode="eval"
+        )
         model = model.to(device)
-        model.eval()
+        print("Successfully loaded model!")
     except Exception as e:
         print(f"Error loading model: {e}")
         sys.exit(1)
@@ -108,7 +104,8 @@ def process_image(model_path, image_path, enhance=True, config_path=None):
         print(f"\nRaw prediction: {raw_predicted_class} (Confidence: {raw_confidence*100:.2f}%)")
         print(f"Calibrated prediction: {calibrated_predicted_class} (Confidence: {calibrated_confidence*100:.2f}%)")
         print("\nClass probabilities:")
-        for i in range(6):
+        num_classes = len(config.class_distribution)
+        for i in range(num_classes):
             print(f"  Class {i}: Raw {probs[0, i].item()*100:.2f}%, Calibrated {calibrated_probs[i].item()*100:.2f}%")
         
         # Use calibrated prediction as final count

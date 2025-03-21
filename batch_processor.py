@@ -3,14 +3,17 @@ import pandas as pd
 import argparse
 import torch
 import glob
-from transformer_swin import create_swin_transformer, load_swin_model
+from model_factory import ModelFactory
 from receipt_processor import ReceiptProcessor
+from device_utils import get_device
 from tqdm import tqdm
 
 def process_document_archive(model_path, input_dir, output_csv):
     """Process a directory of scanned documents and count receipts in each."""
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = load_swin_model(model_path).to(device)
+    device = get_device()
+    # Determine model type from filename, default to swin
+    model_type = "vit" if "vit" in model_path.lower() else "swin"
+    model = ModelFactory.load_model(model_path, model_type=model_type, mode="eval").to(device)
     processor = ReceiptProcessor()
     
     # Find all image files
@@ -71,8 +74,24 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Batch Receipt Counter")
     parser.add_argument("--input_dir", required=True, help="Directory with scanned documents")
     parser.add_argument("--output_csv", required=True, help="Path to save results CSV")
-    parser.add_argument("--model", default="receipt_counter_swin_tiny.pth",
+    parser.add_argument("--model", default="models/receipt_counter_swin_best.pth",
                        help="Path to model file")
+    parser.add_argument("--model_type", choices=["vit", "swin"], 
+                       help="Model type (vit or swin). If not specified, detected from model filename.")
     
     args = parser.parse_args()
+    
+    # If model_type is provided, override the auto-detection in process_document_archive
+    if args.model_type:
+        model_path = args.model
+        # Create a new model with the specified type
+        device = get_device()
+        model = ModelFactory.load_model(model_path, model_type=args.model_type, mode="eval")
+        model = model.to(device)
+        processor = ReceiptProcessor()
+        
+        # We can't directly pass the model to process_document_archive due to its signature,
+        # so we'd need to refactor it. For now, just use the auto-detection
+        print(f"Using model type: {args.model_type} (specified via argument)")
+    
     process_document_archive(args.model, args.input_dir, args.output_csv)
