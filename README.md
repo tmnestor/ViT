@@ -30,21 +30,21 @@ Where $TP$ = True Positives, $TN$ = True Negatives, $FP$ = False Positives, and 
 For imbalanced datasets, balanced accuracy provides a better performance measure by accounting for class 
 imbalance:
 
-$$\text{Balanced Accuracy} = \frac{1}{n} \sum_{i=1}^{n} \frac{TP_i}{TP_i + FN_i}$$
+$$\text{Balanced Accuracy} = \frac{1}{n} \sum\_{i=1}^{n} \frac{TP\_i}{TP\_i + FN\_i}$$
 
-Where $n$ is the number of classes, and $\frac{TP_i}{TP_i + FN_i}$ represents the recall for class $i$.
+Where $n$ is the number of classes, and $\frac{TP\_i}{TP\_i + FN\_i}$ represents the recall for class $i$.
 
 #### F1 Macro Score
 
 The F1 score is the harmonic mean of precision and recall. F1 Macro calculates the F1 score for each class 
 independently and then takes the average:
 
-$$\text{F1 Macro} = \frac{1}{n} \sum_{i=1}^{n} \frac{2 \times \text{Precision}_i \times 
-\text{Recall}_i}{\text{Precision}_i + \text{Recall}_i}$$
+$$\text{F1 Macro} = \frac{1}{n} \sum\_{i=1}^{n} \frac{2 \times \text{Precision}\_i \times 
+\text{Recall}\_i}{\text{Precision}\_i + \text{Recall}\_i}$$
 
 Where:
-- $\text{Precision}_i = \frac{TP_i}{TP_i + FP_i}$
-- $\text{Recall}_i = \frac{TP_i}{TP_i + FN_i}$
+- $\text{Precision}\_i = \frac{TP\_i}{TP\_i + FP\_i}$
+- $\text{Recall}\_i = \frac{TP\_i}{TP\_i + FN\_i}$
 
 ### Class Weights and Calibration
 
@@ -52,9 +52,9 @@ Where:
 
 To address class imbalance during training, we apply inverse frequency weighting:
 
-$$\text{Raw Weight}_i = \frac{1}{p_i}$$
+$$\text{Raw Weight}\_i = \frac{1}{p\_i}$$
 
-Where $p_i$ is the prior probability (relative frequency) of class $i$ in the training data.
+Where $p\_i$ is the prior probability (relative frequency) of class $i$ in the training data.
 
 We then normalize these weights to maintain proper scaling:
 
@@ -69,11 +69,11 @@ class weighting during training (Guo et al., 2017)[^1].
 
 For each class $i$, we compute the calibration factor as:
 
-$$\text{Calibration Factor}_i = p_i \times \sqrt{\frac{p_{\text{ref}}}{p_i}}$$
+$$\text{Calibration Factor}\_i = p\_i \times \sqrt{\frac{p\_{\text{ref}}}{p\_i}}$$
 
 Where:
-- $p_i$ is the prior probability of class $i$
-- $p_{\text{ref}} = \frac{1}{n}$ represents the reference probability for a balanced dataset
+- $p\_i$ is the prior probability of class $i$
+- $p\_{\text{ref}} = \frac{1}{n}$ represents the reference probability for a balanced dataset
 
 This formulation provides a principled Bayesian adjustment that balances the influence of the prior while 
 compensating for minority classes. The square root term implements a form of Jeffreys prior[^2], which is a 
@@ -81,8 +81,8 @@ common choice in Bayesian statistics when dealing with classification problems.
 
 For inference, we apply these calibration factors to the raw model outputs:
 
-$$\text{Calibrated Probability}_i = \frac{\text{Raw Probability}_i \times \text{Calibration Factor}_i \times
-p_i}{\sum_{j=1}^{n} \text{Raw Probability}_j \times \text{Calibration Factor}_j \times p_j}$$
+$$\text{Calibrated Probability}\_i = \frac{\text{Raw Probability}\_i \times \text{Calibration Factor}\_i \times
+p\_i}{\sum\_{j=1}^{n} \text{Raw Probability}\_j \times \text{Calibration Factor}\_j \times p\_j}$$
 
 This recalibration helps prevent the model from over-predicting minority classes, resulting in more accurate
 predictions that better reflect real-world class distributions.
