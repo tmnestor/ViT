@@ -58,7 +58,9 @@ Where $p_i$ is the prior probability (relative frequency) of class $i$ in the tr
 
 We then normalize these weights to maintain proper scaling:
 
+
 $$\text{Normalized Weight}_i = \frac{\text{Raw Weight}_i}{\sum_{j=1}^{n} \text{Raw Weight}_j} \times n$$
+
 
 The multiplication by $n$ (number of classes) ensures that the average weight remains around 1.0.
 
