@@ -52,9 +52,7 @@ Where:
 
 To address class imbalance during training, we apply inverse frequency weighting:
 
-$$
-\text{Raw Weight}_i = \frac{1}{p_i}
-$$
+$$\text{Raw Weight}_i = \frac{1}{p_i}$$
 
 Where $p_i$ is the prior probability (relative frequency) of class $i$ in the training data.
 
@@ -71,9 +69,7 @@ class weighting during training (Guo et al., 2017)[^1].
 
 For each class $i$, we compute the calibration factor as:
 
-$$
-\text{Calibration Factor}_i = p_i \times \sqrt{\frac{p_{\text{ref}}}{p_i}}
-$$
+$$\text{Calibration Factor}_i = p_i \times \sqrt{\frac{p_{\text{ref}}}{p_i}}$$
 
 Where:
 - $p_i$ is the prior probability of class $i$
@@ -85,10 +81,8 @@ common choice in Bayesian statistics when dealing with classification problems.
 
 For inference, we apply these calibration factors to the raw model outputs:
 
-$$
-\text{Calibrated Probability}_i = \frac{\text{Raw Probability}_i \times \text{Calibration Factor}_i \times
-p_i}{\sum_{j=1}^{n} \text{Raw Probability}_j \times \text{Calibration Factor}_j \times p_j}
-$$
+$$\text{Calibrated Probability}_i = \frac{\text{Raw Probability}_i \times \text{Calibration Factor}_i \times
+p_i}{\sum_{j=1}^{n} \text{Raw Probability}_j \times \text{Calibration Factor}_j \times p_j}$$
 
 This recalibration helps prevent the model from over-predicting minority classes, resulting in more accurate
 predictions that better reflect real-world class distributions.
