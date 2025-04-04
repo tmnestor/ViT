@@ -52,6 +52,9 @@ def train_model(
         binary: If True, use binary classification (0 vs 1+ receipts)
         augment: If True, apply data augmentation during training
         resume_checkpoint: Path to checkpoint to resume training from (optional)
+        
+    Returns:
+        The best model from training, NOT the final model from the last epoch
     """
     # Create output directory
     output_path = Path(output_dir)
@@ -64,7 +67,10 @@ def train_model(
         print("Using binary classification (multiple receipts or not)")
     else:
         config.set_binary_mode(False)
-        print(f"Using multi-class classification (0-{len(config.class_distribution)-1} receipts)")
+        if len(config.class_distribution) == 3:
+            print("Using simplified 3-class classification (0, 1, 2+ receipts)")
+        else:
+            print(f"Using multi-class classification (0-{len(config.class_distribution)-1} receipts)")
 
     # Get number of workers from config
     num_workers = config.get_model_param("num_workers", 4)
@@ -92,7 +98,7 @@ def train_model(
     if resume_checkpoint:
         checkpoint_path = Path(resume_checkpoint)
         print(f"Loading model checkpoint from {checkpoint_path}")
-        model = ModelFactory.load_model(checkpoint_path, model_type="swinv2").to(device)
+        model = ModelFactory.load_model(checkpoint_path).to(device)
         print("Resumed SwinV2 Transformer model from checkpoint")
     else:
         model = ModelFactory.create_transformer(model_type="swinv2", pretrained=True).to(device)
@@ -149,10 +155,20 @@ def train_model(
 
     # For early stopping - get patience from config or CLI args
     patience = config.get_model_param("early_stopping_patience")
-    # Create early stopping here, outside the epoch loop
+    # Create early stopping here, outside the epoch loop - only monitor F1 macro
     early_stopping = EarlyStopping(patience=patience, mode="max", verbose=True)
     best_f1_macro = 0
-    best_balanced_acc = 0  # Also track balanced accuracy improvement
+    
+    # Create the ModelCheckpoint utility outside the epoch loop so it maintains state across epochs
+    checkpoint = ModelCheckpoint(
+        output_dir=output_dir,
+        metrics=["f1_macro"],  # Only F1 macro is used for saving models now
+        mode="max", 
+        verbose=True
+    )
+    
+    # Save a copy of the initial model for backup
+    best_model = None
 
     # Training loop
     print(f"Starting training for {epochs} epochs...")
@@ -221,20 +237,20 @@ def train_model(
         # Update learning rate scheduler based on F1 score
         scheduler.step(val_f1_macro)
         
-        # Use the ModelCheckpoint utility to save models based on metrics
-        checkpoint = ModelCheckpoint(
-            output_dir=output_dir,
-            metrics=["f1_macro"],  # Only track F1 score
-            mode="max",
-            verbose=True
-        )
-        
         # Check if any metric has improved and save the model if needed
         improved = checkpoint.check_improvement(
             metrics_dict=metrics,
             model=model,
             model_type="swinv2"
         )
+        
+        # If model improved, keep a copy in memory too
+        if improved:
+            # Create a deep copy of the model
+            best_model = ModelFactory.load_model(
+                output_path / "receipt_counter_swinv2_best.pth",
+                mode="eval"
+            )
         
         # Use the already created EarlyStopping utility to decide whether to stop training
         should_stop = early_stopping.check_improvement(val_f1_macro)
@@ -256,49 +272,47 @@ def train_model(
         output_path=output_path / "swinv2_classification_curves.png"
     )
     
-    # Load the best model for final evaluation
-    print("\nLoading best model for final evaluation...")
-    best_model_path = output_path / "receipt_counter_swinv2_best.pth"
-    if best_model_path.exists():
-        # Load best model
-        best_model = ModelFactory.load_model(best_model_path, model_type="swinv2").to(device)
-        
-        # Evaluate best model
-        best_metrics = validate(best_model, val_loader, criterion, device)
-        
-        # Plot confusion matrix for best model
-        accuracy, balanced_accuracy = plot_confusion_matrix(
-            best_metrics['predictions'],
-            best_metrics['targets'],
-            output_path=output_path / "swinv2_classification_results.png",
-        )
-        
-        # Get F1 score from best model
-        f1_macro = best_metrics['f1_macro']
-
-        print("\nBest Model Results:")
-        print(f"Accuracy: {accuracy:.2%}")
-        print(f"F1 Macro: {f1_macro:.2%}")
-        print(f"Balanced Accuracy: {balanced_accuracy:.2%}")
+    # We should already have the best model in memory
+    print("\nEvaluating the best model...")
+    
+    # If we have the best model in memory, use it
+    if best_model is not None:
+        print("Using the best model that was saved during training")
+        best_model = best_model.to(device)
     else:
-        # If best model doesn't exist for some reason, evaluate the final model
-        print("Best model not found. Evaluating final model instead.")
-        metrics = validate(model, val_loader, criterion, device)
-        
-        # Plot confusion matrix
-        accuracy, balanced_accuracy = plot_confusion_matrix(
-            metrics['predictions'],
-            metrics['targets'],
-            output_path=output_path / "swinv2_classification_results.png",
-        )
-        
-        # Get F1 score
-        f1_macro = metrics['f1_macro']
+        # As a fallback, try to load from disk
+        best_model_path = output_path / "receipt_counter_swinv2_best.pth"
+        if best_model_path.exists():
+            print(f"Loading best model from {best_model_path}")
+            best_model = ModelFactory.load_model(best_model_path).to(device)
+        else:
+            # If best model doesn't exist for some reason, use the final model
+            print("WARNING: Best model not found. Using final model instead.")
+            best_model = model
+    
+    # Always evaluate the best model
+    best_metrics = validate(best_model, val_loader, criterion, device)
+    
+    # Plot confusion matrix for best model
+    accuracy, balanced_accuracy = plot_confusion_matrix(
+        best_metrics['predictions'],
+        best_metrics['targets'],
+        output_path=output_path / "swinv2_classification_results.png",
+    )
+    
+    # Get F1 score from best model
+    f1_macro = best_metrics['f1_macro']
 
-        print("\nFinal Model Results:")
-        print(f"Accuracy: {accuracy:.2%}")
-        print(f"F1 Macro: {f1_macro:.2%}")
-        print(f"Balanced Accuracy: {balanced_accuracy:.2%}")
+    print("\nBest Model Results:")
+    print(f"Accuracy: {accuracy:.2%}")
+    print(f"F1 Macro: {f1_macro:.2%}")
+    print(f"Balanced Accuracy: {balanced_accuracy:.2%}")
+    
+    # Print the same format as during training for easy comparison
+    print(f"For comparison with training output: F1 Macro: {f1_macro:.2%}")
+    
+    # ALWAYS return the best model - this is critical!
+    model = best_model
 
     print(f"\nTraining complete! Models saved to {output_path}/")
     return model

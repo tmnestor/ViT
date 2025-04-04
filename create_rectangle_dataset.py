@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Generate a simplified synthetic dataset with clearly defined rectangles as receipts.
+Create a simplified synthetic dataset with clearly defined rectangles as receipts.
 This script creates images with 0-4 white rectangles on a dark background.
 The goal is to create a clean dataset to debug the hierarchical classification system.
 """

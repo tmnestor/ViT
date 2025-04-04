@@ -57,32 +57,33 @@ class ModelCheckpoint:
         
         self.improved = False
         
-        for metric in self.metrics:
-            if metric not in metrics_dict:
-                if self.verbose:
-                    print(f"Warning: Metric '{metric}' not in provided metrics dictionary. Skipping.")
-                continue
+        # We only care about f1_macro for saving models
+        metric = "f1_macro"
+        if metric not in metrics_dict:
+            if self.verbose:
+                print(f"Warning: F1 macro metric not in provided metrics dictionary. Skipping.")
+            return False
+        
+        current_value = metrics_dict[metric]
+        
+        # Check if the current value is better than the best value
+        if ((self.mode == "max" and current_value > self.best_values[metric]) or
+            (self.mode == "min" and current_value < self.best_values[metric])):
             
-            current_value = metrics_dict[metric]
+            # Update best value
+            self.best_values[metric] = current_value
             
-            # Check if the current value is better than the best value
-            if ((self.mode == "max" and current_value > self.best_values[metric]) or
-                (self.mode == "min" and current_value < self.best_values[metric])):
-                
-                # Update best value
-                self.best_values[metric] = current_value
-                
-                # Save model with simpler name without the metric in the filename
-                save_path = os.path.join(
-                    self.output_dir, 
-                    f"{self.prefix}receipt_counter_{model_type}_best.pth"
-                )
-                ModelFactory.save_model(model, save_path)
-                
-                if self.verbose:
-                    print(f"Saved model with {metric}: {current_value:.4f}")
-                
-                self.improved = True
+            # Save model
+            save_path = os.path.join(
+                self.output_dir, 
+                f"{self.prefix}receipt_counter_{model_type}_best.pth"
+            )
+            ModelFactory.save_model(model, save_path)
+            
+            if self.verbose:
+                print(f"Saved new best model with F1 Macro: {current_value:.4f}")
+            
+            self.improved = True
         
         return self.improved
 
@@ -298,10 +299,11 @@ def plot_confusion_matrix(predictions, ground_truth, output_path=None, figsize=(
     plt.title('Confusion Matrix')
     plt.colorbar()
     
-    classes = [str(i) for i in range(num_classes)]
-    tick_marks = np.arange(len(classes))
-    plt.xticks(tick_marks, classes)
-    plt.yticks(tick_marks, classes)
+    # Use descriptive class labels
+    class_labels = ["0", "1", "2+"] if num_classes == 3 else [str(i) for i in range(num_classes)]
+    tick_marks = np.arange(len(class_labels))
+    plt.xticks(tick_marks, class_labels)
+    plt.yticks(tick_marks, class_labels)
     
     # Add text annotations to confusion matrix
     thresh = cm.max() / 2.
@@ -322,7 +324,7 @@ def plot_confusion_matrix(predictions, ground_truth, output_path=None, figsize=(
     
     # Class accuracies
     class_accuracies = []
-    for i in range(len(classes)):
+    for i in range(len(class_labels)):
         total_class = np.sum(cm[i, :])
         if total_class > 0:
             class_accuracies.append(cm[i, i] / total_class)
@@ -403,7 +405,14 @@ def plot_evaluation_metrics(metrics, output_dir="evaluation"):
     # Create output directory
     os.makedirs(output_dir, exist_ok=True)
     
-    predictions = metrics['predictions']
+    # Get the appropriate predictions (calibrated or uncalibrated)
+    if 'calibrated_predictions' in metrics:
+        predictions = metrics['calibrated_predictions']
+        print("DEBUG: Using calibrated predictions for evaluation plots")
+    else:
+        predictions = metrics['predictions']
+        print("DEBUG: Using uncalibrated predictions for evaluation plots")
+    
     ground_truth = metrics['targets']
     
     # Get number of classes from config
@@ -420,8 +429,9 @@ def plot_evaluation_metrics(metrics, output_dir="evaluation"):
     plt.title('Confusion Matrix')
     plt.colorbar()
     tick_marks = np.arange(num_classes)
-    plt.xticks(tick_marks, [f'{i}' for i in range(num_classes)])
-    plt.yticks(tick_marks, [f'{i}' for i in range(num_classes)])
+    class_labels = ["0", "1", "2+"] if num_classes == 3 else [f'{i}' for i in range(num_classes)]
+    plt.xticks(tick_marks, class_labels)
+    plt.yticks(tick_marks, class_labels)
     plt.xlabel('Predicted Label')
     plt.ylabel('True Label')
     
@@ -453,7 +463,8 @@ def plot_evaluation_metrics(metrics, output_dir="evaluation"):
     plt.subplot(2, 2, 3)
     plt.bar(range(len(class_acc)), class_acc)
     plt.title('Per-Class Accuracy')
-    plt.xticks(range(len(class_acc)), [f'{i}' for i in range(num_classes)])
+    class_labels = ["0", "1", "2+"] if num_classes == 3 else [f'{i}' for i in range(num_classes)]
+    plt.xticks(range(len(class_acc)), class_labels)
     plt.xlabel('Number of Receipts')
     plt.ylabel('Accuracy')
     plt.grid(axis='y', alpha=0.3)
@@ -463,7 +474,8 @@ def plot_evaluation_metrics(metrics, output_dir="evaluation"):
     class_counts = np.array([np.sum(np.array(ground_truth) == i) for i in range(num_classes)])
     plt.bar(range(len(class_counts)), class_counts)
     plt.title('Class Distribution')
-    plt.xticks(range(len(class_counts)), [f'{i}' for i in range(num_classes)])
+    class_labels = ["0", "1", "2+"] if num_classes == 3 else [f'{i}' for i in range(num_classes)]
+    plt.xticks(range(len(class_counts)), class_labels)
     plt.xlabel('Number of Receipts')
     plt.ylabel('Count')
     plt.grid(axis='y', alpha=0.3)
@@ -497,7 +509,11 @@ def plot_evaluation_metrics(metrics, output_dir="evaluation"):
     plt.bar(count_vals, [item['accuracy'] for item in error_by_count], label='Accuracy')
     plt.plot(count_vals, [item['f1_score'] for item in error_by_count], 'o-', color='red', label='F1 Score')
     plt.title('Performance by Number of Receipts')
-    plt.xticks(count_vals)
+    # Use descriptive labels for the 3-class system
+    if len(count_vals) == 3:
+        plt.xticks(count_vals, ["0", "1", "2+"])
+    else:
+        plt.xticks(count_vals)
     plt.xlabel('Number of Receipts')
     plt.ylabel('Score')
     plt.legend()

@@ -27,11 +27,11 @@ class ModelFactory:
     }
     
     @classmethod
-    def create_transformer(cls, model_type="vit", pretrained=True, num_classes=None, verbose=True, mode="train"):
+    def create_transformer(cls, model_type="swinv2", pretrained=True, num_classes=None, verbose=True, mode="train"):
         """Create a transformer model for receipt counting.
         
         Args:
-            model_type: Type of model to create ("vit" or "swin")
+            model_type: Type of model to create (only "swinv2" is fully supported)
             pretrained: Whether to load pretrained weights from Hugging Face
             num_classes: Number of output classes. If None, will be determined from config
             verbose: Whether to show warnings about weight initialization
@@ -144,19 +144,28 @@ class ModelFactory:
         torch.save(model.state_dict(), path)
     
     @classmethod
-    def load_model(cls, path, model_type="vit", num_classes=None, strict=True, mode="eval"):
-        """Load a saved transformer model.
+    def load_model(cls, path, num_classes=None, strict=True, mode="eval"):
+        """Load a saved SwinV2 transformer model.
         
         Args:
             path: Path to the saved model weights
-            model_type: Type of model to load ("vit" or "swin")
             num_classes: Number of output classes. If None, will be determined from config
             strict: Whether to enforce strict parameter matching
             mode: "train" for training mode, "eval" for evaluation mode
             
         Returns:
-            Loaded model
+            Loaded SwinV2 model
         """
+        # We only support SwinV2 models now
+        model_type = "swinv2"
+        print(f"Loading model from {path} as a SwinV2 model")
+        
+        # Load state dict first to inspect
+        state_dict = torch.load(path)
+        
+        # Only SwinV2 models are supported
+        model_type = "swinv2"
+            
         # Create empty model structure without pretrained weights
         model = cls.create_transformer(
             model_type=model_type,
@@ -166,8 +175,31 @@ class ModelFactory:
             mode=mode
         )
         
-        # Load saved weights
-        model.load_state_dict(torch.load(path), strict=strict)
+        # We only support SwinV2 models now
+        # No need to check for other model types
+        
+        # Try loading with strict=True first
+        try:
+            model.load_state_dict(state_dict, strict=True)
+            print("Successfully loaded model with strict=True")
+        except Exception as e:
+            if strict:
+                # If strict is required, re-raise the exception
+                print(f"Error loading model with strict=True: {e}")
+                print("If you're loading a Swin model as SwinV2, incompatibilities are expected.")
+                raise e
+            else:
+                # If strict is not required, try loading with strict=False
+                print(f"Warning: Could not load with strict=True: {e}")
+                print("Trying again with strict=False...")
+                try:
+                    model.load_state_dict(state_dict, strict=False)
+                    print("Loaded with strict=False. Model may be missing some weights or have extra parameters.")
+                except Exception as e2:
+                    print(f"Error even with strict=False: {e2}")
+                    print("Model architecture is likely incompatible with the saved weights.")
+                    raise e2
+                
         return model
 
 

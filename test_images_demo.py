@@ -68,16 +68,14 @@ def process_multiple_images(model_path, image_dir, num_samples=4):
     # Load model
     device = get_device()
     try:
-        # Determine if it's a ViT or Swin model based on filename
-        model_type = "vit" if "vit" in model_path.lower() else "swin"
+        # Load model (only SwinV2 is supported now)
         model = ModelFactory.load_model(
             model_path, 
-            model_type=model_type, 
             strict=True, 
             mode="eval"
         ).to(device)
         processor = ReceiptProcessor()
-        print(f"Successfully loaded {model_type.upper()} model!")
+        print(f"Successfully loaded SwinV2 model!")
     except Exception as e:
         print(f"Error loading model: {e}")
         print("Model loading failed. Please ensure the model file exists and is in the correct format.")

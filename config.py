@@ -4,16 +4,17 @@ Contains class distribution settings and calibration parameters that can be upda
 as the real-world distribution changes, as well as model and training parameters.
 """
 
-import os
 import json
+import os
+
 import torch
 
 # Disable albumentations version check to avoid network connectivity warnings
 os.environ["ALBUMENTATIONS_SKIP_VERSION_CHECK"] = "1"
 
 # Default class distribution - can be overridden by environment or config file
-# Format: [p0, p1, p2, p3, p4, p5] where p_i is probability of having i receipts
-DEFAULT_CLASS_DISTRIBUTION = [0.4, 0.2, 0.2, 0.1, 0.1]
+# Format: [p0, p1, p2+] where p_i is probability of having i receipts (p2+ = 2 or more)
+DEFAULT_CLASS_DISTRIBUTION = [0.4, 0.3, 0.3]
 
 # Default binary distribution - for "multiple receipts or not" classification
 # Format: [p0, p1+] where p0 is probability of having 0 receipts, p1+ is probability of having 1+ receipts
@@ -22,9 +23,12 @@ DEFAULT_BINARY_DISTRIBUTION = [0.6, 0.4]
 # Default model architecture parameters
 DEFAULT_MODEL_PARAMS = {
     # Image parameters
-    "image_size": 224,
-    "normalization_mean": [0.485, 0.456, 0.406],  # ImageNet mean
-    "normalization_std": [0.229, 0.224, 0.225],  # ImageNet std
+    # "image_size": 224,
+    # "normalization_mean": [0.485, 0.456, 0.406],  # ImageNet mean
+    # "normalization_std": [0.229, 0.224, 0.225],  # ImageNet std
+    "image_size": 256,  # SwinV2 uses 256x256 images
+    "normalization_mean": [0.5, 0.5, 0.5],  # SwinV2 mean
+    "normalization_std": [0.5, 0.5, 0.5],  # SwinV2 std
     # Classifier architecture
     "classifier_dims": [768, 512, 256],  # Hidden layer dimensions
     "dropout_rates": [0.4, 0.4, 0.3],  # Dropout rates for each layer
@@ -118,7 +122,7 @@ class Config:
             "RECEIPT_LABEL_SMOOTHING": ("label_smoothing", float),
             "RECEIPT_GRADIENT_CLIP": ("gradient_clip_value", float),
         }
-        
+
         # Process each environment variable
         for env_var, (param_name, convert_func) in env_to_param.items():
             if env_var in os.environ:

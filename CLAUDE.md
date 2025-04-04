@@ -64,11 +64,11 @@ python evaluate_vit_counter.py --model models/receipt_counter_vit_best.pth \
                              --test_dir receipt_dataset/val \
                              --output_dir evaluation/vit_base
 
-# Evaluate Swin model
-python evaluate_swin_counter.py --model models/receipt_counter_swin_best.pth \
+# Evaluate SwinV2 model
+python evaluate_swinv2_classifier.py --model models/receipt_counter_swinv2_best.pth \
                                  --test_csv receipt_dataset/val.csv \
                                  --test_dir receipt_dataset/val \
-                                 --output_dir evaluation/swin_tiny
+                                 --output_dir evaluation/swinv2_tiny
 ```
 
 ### Testing on Individual Images
@@ -116,7 +116,7 @@ python test_images_demo.py --image_dir receipt_collages --samples 4 --mode proce
 
 ### Data Generation:
 - `create_receipt_collages.py` - Generate synthetic receipt collages
-- `prepare_collage_dataset.py` - Prepare datasets from collage images
+- `create_collage_dataset.py` - Create datasets from collage images
 
 ## Recent Refactoring
 
@@ -164,3 +164,23 @@ The project now includes a centralized reproducibility module for consistent res
 - Default seed is 42 if not specified
 
 Note: Full deterministic mode may impact performance, especially on GPUs.
+
+## Environment Setup
+
+The project uses a Conda environment specified in `environment.yml`. To set up the environment:
+
+```bash
+# Create and activate the environment
+conda env create -f environment.yml
+conda activate vit_env
+```
+
+Key dependencies:
+- Python 3.11
+- PyTorch 2.6.0
+- torchvision 0.21.0
+- transformers 4.49.0
+- pandas 2.2.3
+- scikit-learn 1.6.1
+- albumentations 2.0.5
+- matplotlib 3.10.1

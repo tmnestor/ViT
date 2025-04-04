@@ -32,15 +32,13 @@ def process_image(model_path, image_path, enhance=True, config_path=None):
     # Load model based on model path
     print(f"Loading model from {model_path}...")
     
-    # Determine if it's a ViT or Swin model based on filename
-    model_type = "vit" if "vit" in model_path.lower() else "swin"
+    # Now we only support SwinV2 models
     
     try:
-        # Load model using the factory with strict=True
+        # Load model using the factory with strict=False to allow for class count changes
         model = ModelFactory.load_model(
-            model_path, 
-            model_type=model_type, 
-            strict=True,
+            model_path,
+            strict=False,
             mode="eval"
         )
         model = model.to(device)
@@ -112,7 +110,13 @@ def process_image(model_path, image_path, enhance=True, config_path=None):
         count = calibrated_predicted_class
         confidence = calibrated_confidence
     
-    print(f"Detected {count} receipts in the image.")
+    # Format the output for the 3-class system
+    if count == 2:
+        count_display = "2+"
+    else:
+        count_display = str(count)
+    
+    print(f"Detected {count_display} receipts in the image.")
     print(f"Confidence: {confidence:.4f} ({confidence*100:.2f}%)")
     
     # Visualize results
@@ -122,7 +126,7 @@ def process_image(model_path, image_path, enhance=True, config_path=None):
         
         plt.figure(figsize=(10, 8))
         plt.imshow(img)
-        plt.title(f"Detected {count} receipts (Confidence: {confidence*100:.2f}%)")
+        plt.title(f"Detected {count_display} receipts (Confidence: {confidence*100:.2f}%)")
         plt.axis('off')
         plt.savefig("result.jpg")
         print("Visualization saved as 'result.jpg'")
@@ -136,8 +140,8 @@ def process_image(model_path, image_path, enhance=True, config_path=None):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Receipt Counter Demo")
     parser.add_argument("--image", required=True, help="Path to scanned image")
-    parser.add_argument("--model", default="models/receipt_counter_swin_best.pth",
-                       help="Path to model")
+    parser.add_argument("--model", default="models/receipt_counter_swinv2_best.pth",
+                       help="Path to model (use the 'best' model, not the 'final' model)")
     parser.add_argument("--no-enhance", action="store_true",
                        help="Skip image enhancement (use if OpenCV has issues)")
     parser.add_argument("--config", help="Path to configuration JSON file")

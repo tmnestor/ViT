@@ -94,7 +94,10 @@ class ReceiptDataset(Dataset):
             binary_label = 1 if count > 0 else 0
             return image_tensor, torch.tensor(binary_label, dtype=torch.long)
         else:
-            # Original multiclass classification (0-5 receipts)
+            # 3-class classification (0, 1, 2+ receipts)
+            # Map all counts of 2 or more to class 2
+            if count >= 2:
+                count = 2
             return image_tensor, torch.tensor(count, dtype=torch.long)
 
 
