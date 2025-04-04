@@ -27,7 +27,8 @@ def evaluate_model(
     output_dir="evaluation", 
     config_path=None, 
     binary=False,
-    apply_calibration=True
+    apply_calibration=True,
+    model_type=None
 ):
     """
     Evaluate a trained transformer model on test data.
@@ -38,11 +39,11 @@ def evaluate_model(
         test_dir: Directory containing test images
         batch_size: Batch size for evaluation
         output_dir: Directory to save evaluation results
-        model_type: Type of model to evaluate ("vit" or "swin")
         config_path: Path to configuration JSON file (optional)
         binary: If True, use binary classification (0 vs 1+ receipts)
         apply_calibration: If True, apply Bayesian calibration to predictions (default: True)
                           This makes evaluation consistent with individual_image_tester.py
+        model_type: Type of model to evaluate ("swinv2" or "swinv2-large") (default from config)
         
     Returns:
         dict: Dictionary containing evaluation metrics and results
@@ -59,6 +60,10 @@ def evaluate_model(
         else:
             print(f"Warning: Configuration file not found: {config_path}")
             print("Using default configuration")
+    
+    # Get model_type from args or config if not provided
+    if model_type is None:
+        model_type = config.get_model_param("model_type", "swinv2")
     
     # Set binary mode if specified
     if binary:
@@ -78,21 +83,19 @@ def evaluate_model(
     # Get the best available device
     device = get_device()
     
-    # Load model as SwinV2
-    print(f"Loading model from {model_path} as SwinV2...")
+    # Load model with proper model type
+    print(f"Loading model from {model_path} as {model_type}...")
     
     try:
-        # Use the ModelFactory.load_model which now only supports SwinV2
+        # Use the ModelFactory.load_model with the specified model_type
         model = ModelFactory.load_model(
             model_path, 
             strict=False,  # Try non-strict loading if strict fails
-            mode="eval"
+            mode="eval",
+            model_type=model_type
         )
         
-        print(f"Successfully loaded weights into SwinV2 model!")
-        
-        # SwinV2 is the only supported model type
-        model_type = "swinv2"
+        print(f"Successfully loaded weights into {model_type} model!")
             
         # Move model to device
         model = model.to(device)

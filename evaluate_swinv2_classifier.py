@@ -20,6 +20,8 @@ def main():
     parser.add_argument("--model_variant", default="best",
                        choices=["best", "best_bacc", "best_f1", "final"],
                        help="Model variant to evaluate (default: best)")
+    parser.add_argument("--model_type", choices=["swinv2", "swinv2-large"],
+                       help="Type of SwinV2 model to use (default from config)")
     parser.add_argument("--output_dir", default="evaluation_swinv2",
                        help="Directory to save evaluation results")
     parser.add_argument("--config", 
@@ -31,17 +33,33 @@ def main():
     
     args = parser.parse_args()
     
+    # Get configuration to determine model type if not provided
+    from config import get_config
+    config = get_config()
+    
+    # Get model_type from args or config
+    model_type = args.model_type if args.model_type is not None else config.get_model_param("model_type", "swinv2")
+    
     # If a model directory is provided instead of a specific model file,
-    # construct the path using the model_variant argument
+    # construct the path using the model_variant and model_type arguments
     model_path = Path(args.model)
     if model_path.is_dir():
-        variant_map = {
-            "best": "receipt_counter_swinv2_best.pth",
-            "best_bacc": "receipt_counter_swinv2_best_bacc.pth",
-            "best_f1": "receipt_counter_swinv2_best_f1.pth",
-            "final": "receipt_counter_swinv2_final.pth"
-        }
-        model_filename = variant_map.get(args.model_variant, "receipt_counter_swinv2_best.pth")
+        # Define variant map based on model type
+        if model_type == "swinv2-large":
+            variant_map = {
+                "best": f"receipt_counter_{model_type}_best.pth",
+                "best_bacc": f"receipt_counter_{model_type}_best_bacc.pth",
+                "best_f1": f"receipt_counter_{model_type}_best_f1.pth",
+                "final": f"receipt_counter_{model_type}_final.pth"
+            }
+        else:
+            variant_map = {
+                "best": "receipt_counter_swinv2_best.pth",
+                "best_bacc": "receipt_counter_swinv2_best_bacc.pth",
+                "best_f1": "receipt_counter_swinv2_best_f1.pth",
+                "final": "receipt_counter_swinv2_final.pth"
+            }
+        model_filename = variant_map.get(args.model_variant, f"receipt_counter_{model_type}_best.pth")
         model_path = model_path / model_filename
         print(f"Using model variant: {args.model_variant} at path: {model_path}")
     
@@ -51,6 +69,8 @@ def main():
     # Use the unified evaluation function
     apply_calibration = not args.no_calibration
     
+    print(f"Evaluating with model type: {model_type}")
+    
     evaluate_model(
         model_path=model_path,
         test_csv=Path(args.test_csv),
@@ -59,7 +79,8 @@ def main():
         output_dir=Path(args.output_dir),
         config_path=Path(args.config) if args.config else None,
         binary=args.binary,
-        apply_calibration=apply_calibration
+        apply_calibration=apply_calibration,
+        model_type=model_type
     )
 
 if __name__ == "__main__":

@@ -33,8 +33,8 @@ DEFAULT_MODEL_PARAMS = {
     "dropout_rates": [0.4, 0.4, 0.3],  # Dropout rates for each layer
     # Training parameters
     "batch_size": 8,
-    "learning_rate": 5e-5,
-    "backbone_lr_multiplier": 0.01,  # Multiplier for backbone lr relative to classifier
+    "learning_rate": 5e-4,
+    "backbone_lr_multiplier": 0.02,  # Multiplier for backbone lr relative to classifier
     "weight_decay": 0.01,
     "num_workers": 4,
     "label_smoothing": 0.1,

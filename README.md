@@ -42,12 +42,18 @@ python train_swinv2_classification.py -tc receipt_dataset/train.csv -td receipt_
                               -vc receipt_dataset/val.csv -vd receipt_dataset/val \
                               -s 42 -d
 
-# 4. Evaluate the model
+# 4. Evaluate the model (SwinV2-Tiny)
 python evaluate_swinv2_classifier.py --model models/receipt_counter_swinv2_best.pth \
                                    --test_csv receipt_dataset/test.csv \
                                    --test_dir receipt_dataset/test
 
-# 5. Test a single image
+# 5. Evaluate SwinV2-Large model
+python evaluate_swinv2_classifier.py --model models/receipt_counter_swinv2-large_best.pth \
+                                   --test_csv receipt_dataset/test.csv \
+                                   --test_dir receipt_dataset/test \
+                                   --model_type swinv2-large
+
+# 6. Test a single image
 python individual_image_tester.py --image receipt_collages/collage_254_3_receipts.jpg \
                                  --model models/receipt_counter_swinv2_best.pth
 ```
