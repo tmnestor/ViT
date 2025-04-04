@@ -8,6 +8,9 @@ import os
 import json
 import torch
 
+# Disable albumentations version check to avoid network connectivity warnings
+os.environ["ALBUMENTATIONS_SKIP_VERSION_CHECK"] = "1"
+
 # Default class distribution - can be overridden by environment or config file
 # Format: [p0, p1, p2, p3, p4, p5] where p_i is probability of having i receipts
 DEFAULT_CLASS_DISTRIBUTION = [0.4, 0.2, 0.2, 0.1, 0.1]
@@ -35,7 +38,7 @@ DEFAULT_MODEL_PARAMS = {
     "lr_scheduler_patience": 2,
     "min_lr": 1e-6,
     "gradient_clip_value": 1.0,
-    "early_stopping_patience": 8,
+    "early_stopping_patience": 3,
     # Reproducibility parameters
     "random_seed": 42,
     "deterministic_mode": True,

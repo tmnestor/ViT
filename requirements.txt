@@ -1,12 +1,55 @@
-torch>=2.0.0
-torchvision>=0.15.0  # Used only for transforms and image processing, not models
-opencv-python>=4.7.0
-albumentations>=1.3.0
-flask>=2.0.0
-matplotlib>=3.5.0
-transformers>=4.30.0  # Primary source for ViT and Swin model implementations
-pandas>=1.5.0
-tqdm>=4.65.0
-pillow>=9.0.0
-numpy>=1.22.0
-scikit-learn>=1.0.0  # For evaluation metrics
+albucore==0.0.23
+albumentations==2.0.5
+annotated-types==0.7.0
+blinker==1.9.0
+certifi==2025.1.31
+charset-normalizer==3.4.1
+click==8.1.8
+contourpy==1.3.1
+cycler==0.12.1
+filelock==3.18.0
+Flask==3.1.0
+fonttools==4.56.0
+fsspec==2025.3.0
+huggingface-hub==0.29.3
+idna==3.10
+itsdangerous==2.2.0
+Jinja2==3.1.6
+joblib @ file:///home/conda/feedstock_root/build_artifacts/joblib_1733736026804/work
+kiwisolver==1.4.8
+MarkupSafe==3.0.2
+matplotlib==3.10.1
+mpmath==1.3.0
+networkx==3.4.2
+numpy @ file:///Users/runner/miniforge3/conda-bld/numpy_1742254867999/work/dist/numpy-2.2.4-cp311-cp311-macosx_11_0_arm64.whl#sha256=10701f95f0b55ae60eb6c620ad18ef4823f33de7d2ed4c3914518ed68a58caeb
+opencv-python==4.11.0.86
+opencv-python-headless==4.11.0.86
+packaging==24.2
+pandas==2.2.3
+pillow==11.1.0
+pydantic==2.10.6
+pydantic_core==2.27.2
+pyparsing==3.2.1
+python-dateutil==2.9.0.post0
+pytz==2025.1
+PyYAML==6.0.2
+regex==2024.11.6
+requests==2.32.3
+safetensors==0.5.3
+scikit-learn @ file:///Users/runner/miniforge3/conda-bld/scikit-learn_1736496793327/work/dist/scikit_learn-1.6.1-cp311-cp311-macosx_11_0_arm64.whl#sha256=4639b1c7805c0df35af4cc9625edea9ea96885130c17d04fbab1f69d7cc94f02
+scipy @ file:///Users/runner/miniforge3/conda-bld/scipy-split_1739790733133/work/dist/scipy-1.15.2-cp311-cp311-macosx_11_0_arm64.whl#sha256=22d09b058f8dc2ede3b7efb028656169f42c30d91d02da114d6db6c6ccd40800
+seaborn==0.13.2
+simsimd==6.2.1
+six==1.17.0
+stringzilla==3.12.3
+sympy==1.13.1
+threadpoolctl @ file:///home/conda/feedstock_root/build_artifacts/threadpoolctl_1741878222898/work
+tokenizers==0.21.1
+torch==2.6.0
+torchvision==0.21.0
+tqdm==4.67.1
+transformers==4.49.0
+typing_extensions==4.12.2
+tzdata==2025.1
+urllib3==2.3.0
+Werkzeug==3.1.3

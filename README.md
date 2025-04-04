@@ -75,9 +75,7 @@ Where:
 - $p\_i$ is the prior probability of class $i$
 - $p\_{\text{ref}} = \frac{1}{n}$ represents the reference probability for a balanced dataset
 
-This formulation provides a principled Bayesian adjustment that balances the influence of the prior while 
-compensating for minority classes. The square root term implements a form of Jeffreys prior[^2], which is a 
-common choice in Bayesian statistics when dealing with classification problems.
+This approach combines Bayesian principles with a practical square root adjustment that tempers the effect on minority classes, resulting in a balanced tradeoff between pure Bayesian calibration and equal-class treatment. The square root term implements a form of Jeffreys prior[^2], which is a common choice in Bayesian statistics when dealing with classification problems. This calibration technique builds on established post-hoc calibration methods[^3][^4] and extends recent work on neural network calibration[^5][^6].
 
 For inference, we apply these calibration factors to the raw model outputs:
 
@@ -869,3 +867,39 @@ The training utilities module standardizes:
 [^1]: Guo, C., Pleiss, G., Sun, Y., & Weinberger, K. Q. (2017). On calibration of modern neural networks. In Proceedings of the 34th International Conference on Machine Learning (pp. 1321-1330).
 
 [^2]: Jeffreys, H. (1946). An invariant form for the prior probability in estimation problems. Proceedings of the Royal Society of London. Series A, Mathematical and Physical Sciences, 186(1007), 453-461.
+
+[^3]: Kull, M., Perello-Nieto, M., Kängsepp, M., Silva Filho, T., Song, H., & Flach, P. (2019). Beyond temperature scaling: Obtaining well-calibrated multiclass probabilities with Dirichlet calibration. In Advances in Neural Information Processing Systems (pp. 12316-12326).
+
+[^4]: Zadrozny, B., & Elkan, C. (2002). Transforming classifier scores into accurate multiclass probability estimates. In Proceedings of the eighth ACM SIGKDD international conference on Knowledge discovery and data mining (pp. 694-699).
+
+[^5]: Naeini, M. P., Cooper, G. F., & Hauskrecht, M. (2015). Obtaining well calibrated probabilities using Bayesian binning. In Proceedings of the AAAI Conference on Artificial Intelligence (Vol. 29, No. 1).
+
+[^6]: Nixon, J., Dusenberry, M. W., Zhang, L., Jerfel, G., & Tran, D. (2019). Measuring calibration in deep learning. In CVPR workshops (pp. 38-41).
+
+
+
+python train_swin_classification.py --train_csv receipt_dataset/train.csv --train_dir receipt_dataset/train \
+                           --val_csv receipt_dataset/val.csv --val_dir receipt_dataset/val \
+                           --epochs 20 --batch_size 32 --output_dir models \
+                           --lr 5e-4 --backbone_lr_multiplier 0.02
+
+python evaluate_swin_counter.py --model models/receipt_counter_swin_best.pth \
+                                 --test_csv receipt_dataset/test.csv \
+                                 --test_dir receipt_dataset/test \
+                                 --output_dir evaluation/swin_tiny
+
+python train_swinv2_classification.py -tc receipt_dataset/train.csv -td receipt_dataset/train \
+                             -vc receipt_dataset/val.csv -vd receipt_dataset/val \
+                             -e 20 -b 32 -o models/swinv2 -s 42 -d \
+                             --lr 5e-4 --backbone_lr_multiplier 0.02
+
+python evaluate_swinv2_counter.py --model models/swinv2/receipt_counter_swinv2_best.pth \
+                                   --test_csv receipt_dataset/val.csv \
+                                   --test_dir receipt_dataset/val \
+                                   --output_dir evaluation/swinv2_tiny
+
+
+python create_simple_rectangle_dataset.py --test_size 100 --val_size 100 --train_size 800 
+python evaluate_swinv2_counter.py --model models/swinv2/receipt_counter_swinv2_best.pth --test_csv rectangle_dataset/test.csv --test_dir rectangle_dataset/test --output_dir evaluation/swinv2_tiny
+
+

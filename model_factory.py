@@ -22,7 +22,8 @@ class ModelFactory:
     # Model type to HuggingFace model path mapping
     MODEL_PATHS = {
         "vit": "google/vit-base-patch16-224",
-        "swin": "microsoft/swin-tiny-patch4-window7-224"
+        "swin": "microsoft/swin-tiny-patch4-window7-224",
+        "swinv2": "microsoft/swinv2-tiny-patch4-window8-256"
     }
     
     @classmethod
@@ -73,6 +74,13 @@ class ModelFactory:
                 from transformers import SwinForImageClassification
                 model = SwinForImageClassification.from_pretrained(
                     cls.MODEL_PATHS["swin"], 
+                    num_labels=num_classes,
+                    ignore_mismatched_sizes=True
+                )
+            elif model_type == "swinv2":
+                from transformers import Swinv2ForImageClassification
+                model = Swinv2ForImageClassification.from_pretrained(
+                    cls.MODEL_PATHS["swinv2"], 
                     num_labels=num_classes,
                     ignore_mismatched_sizes=True
                 )

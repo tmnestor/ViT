@@ -38,7 +38,7 @@ def train_model(
     resume_checkpoint=None,
 ):
     """
-    Train the Swin Transformer model for receipt counting as a classification task.
+    Train the SwinV2 Transformer model for receipt counting as a classification task.
     
     Args:
         train_csv: Path to training CSV file
@@ -92,11 +92,11 @@ def train_model(
     if resume_checkpoint:
         checkpoint_path = Path(resume_checkpoint)
         print(f"Loading model checkpoint from {checkpoint_path}")
-        model = ModelFactory.load_model(checkpoint_path, model_type="swin").to(device)
-        print("Resumed Swin Transformer model from checkpoint")
+        model = ModelFactory.load_model(checkpoint_path, model_type="swinv2").to(device)
+        print("Resumed SwinV2 Transformer model from checkpoint")
     else:
-        model = ModelFactory.create_transformer(model_type="swin", pretrained=True).to(device)
-        print("Initialized new Swin Transformer model using Hugging Face transformers")
+        model = ModelFactory.create_transformer(model_type="swinv2", pretrained=True).to(device)
+        print("Initialized new SwinV2 Transformer model using Hugging Face transformers")
 
     # Loss and optimizer with more robust learning rate control
     # Get class weights from configuration system
@@ -137,7 +137,7 @@ def train_model(
     # This helps prevent erratic bouncing around the optimum
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, 
-        mode='max',           # Monitor balanced accuracy which we want to maximize
+        mode='max',           # Monitor F1 score which we want to maximize
         factor=lr_scheduler_factor,  # Multiply LR by this factor on plateau
         patience=lr_scheduler_patience,  # Number of epochs with no improvement before reducing LR
         verbose=True,        # Print message when LR is reduced
@@ -147,11 +147,12 @@ def train_model(
     # Training metrics
     history = {"train_loss": [], "val_loss": [], "val_acc": [], "val_balanced_acc": [], "val_f1_macro": []}
 
-    # For early stopping - get patience from config
-    patience = config.get_model_param("early_stopping_patience", 8)
-    patience_counter = 0
-    best_balanced_acc = 0
-    best_f1_macro = 0  # Also track F1 macro improvement
+    # For early stopping - get patience from config or CLI args
+    patience = config.get_model_param("early_stopping_patience")
+    # Create early stopping here, outside the epoch loop
+    early_stopping = EarlyStopping(patience=patience, mode="max", verbose=True)
+    best_f1_macro = 0
+    best_balanced_acc = 0  # Also track balanced accuracy improvement
 
     # Training loop
     print(f"Starting training for {epochs} epochs...")
@@ -217,13 +218,13 @@ def train_model(
             f"F1 Macro: {val_f1_macro:.2%}"
         )
         
-        # Update learning rate scheduler based on balanced accuracy
-        scheduler.step(val_balanced_acc)
-
+        # Update learning rate scheduler based on F1 score
+        scheduler.step(val_f1_macro)
+        
         # Use the ModelCheckpoint utility to save models based on metrics
         checkpoint = ModelCheckpoint(
             output_dir=output_dir,
-            metrics=["balanced_accuracy", "f1_macro"],
+            metrics=["f1_macro"],  # Only track F1 score
             mode="max",
             verbose=True
         )
@@ -232,42 +233,72 @@ def train_model(
         improved = checkpoint.check_improvement(
             metrics_dict=metrics,
             model=model,
-            model_type="swin"
+            model_type="swinv2"
         )
         
-        # Use the EarlyStopping utility to decide whether to stop training
-        early_stopping = EarlyStopping(patience=patience, mode="max", verbose=True)
-        if early_stopping.check_improvement(val_balanced_acc):
+        # Use the already created EarlyStopping utility to decide whether to stop training
+        should_stop = early_stopping.check_improvement(val_f1_macro)
+        if should_stop:
             print(f"Early stopping triggered after {epoch + 1} epochs")
             break
 
     # Save final model
-    ModelFactory.save_model(model, output_path / "receipt_counter_swin_final.pth")
-
-    # Generate validation plots using the unified functions
-    metrics = validate(model, val_loader, criterion, device)
-    
-    # Plot confusion matrix
-    accuracy, balanced_accuracy = plot_confusion_matrix(
-        metrics['predictions'],
-        metrics['targets'],
-        output_path=output_path / "swin_classification_results.png",
-    )
+    ModelFactory.save_model(model, output_path / "receipt_counter_swinv2_final.pth")
 
     # Save training history
     pd.DataFrame(history).to_csv(
-        output_path / "swin_classification_history.csv", index=False
+        output_path / "swinv2_classification_history.csv", index=False
     )
 
     # Plot training curves using the unified function
     plot_training_curves(
         history,
-        output_path=output_path / "swin_classification_curves.png"
+        output_path=output_path / "swinv2_classification_curves.png"
     )
+    
+    # Load the best model for final evaluation
+    print("\nLoading best model for final evaluation...")
+    best_model_path = output_path / "receipt_counter_swinv2_best.pth"
+    if best_model_path.exists():
+        # Load best model
+        best_model = ModelFactory.load_model(best_model_path, model_type="swinv2").to(device)
+        
+        # Evaluate best model
+        best_metrics = validate(best_model, val_loader, criterion, device)
+        
+        # Plot confusion matrix for best model
+        accuracy, balanced_accuracy = plot_confusion_matrix(
+            best_metrics['predictions'],
+            best_metrics['targets'],
+            output_path=output_path / "swinv2_classification_results.png",
+        )
+        
+        # Get F1 score from best model
+        f1_macro = best_metrics['f1_macro']
 
-    print("\nFinal Results:")
-    print(f"Accuracy: {accuracy:.2%}")
-    print(f"Balanced Accuracy: {balanced_accuracy:.2%}")
+        print("\nBest Model Results:")
+        print(f"Accuracy: {accuracy:.2%}")
+        print(f"F1 Macro: {f1_macro:.2%}")
+        print(f"Balanced Accuracy: {balanced_accuracy:.2%}")
+    else:
+        # If best model doesn't exist for some reason, evaluate the final model
+        print("Best model not found. Evaluating final model instead.")
+        metrics = validate(model, val_loader, criterion, device)
+        
+        # Plot confusion matrix
+        accuracy, balanced_accuracy = plot_confusion_matrix(
+            metrics['predictions'],
+            metrics['targets'],
+            output_path=output_path / "swinv2_classification_results.png",
+        )
+        
+        # Get F1 score
+        f1_macro = metrics['f1_macro']
+
+        print("\nFinal Model Results:")
+        print(f"Accuracy: {accuracy:.2%}")
+        print(f"F1 Macro: {f1_macro:.2%}")
+        print(f"Balanced Accuracy: {balanced_accuracy:.2%}")
 
     print(f"\nTraining complete! Models saved to {output_path}/")
     return model
@@ -275,7 +306,7 @@ def train_model(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Train a Swin-Tiny model for receipt counting as classification"
+        description="Train a SwinV2-Tiny model for receipt counting as classification"
     )
     
     # Data input options
@@ -314,6 +345,10 @@ def main():
     training_group.add_argument(
         "--batch_size", "-b", type=int, default=16, 
         help="Batch size for training (default: 16)"
+    )
+    training_group.add_argument(
+        "--patience", "-p", type=int,
+        help="Early stopping patience (epochs without improvement before stopping)"
     )
     training_group.add_argument(
         "--lr", "-l", type=float, default=5e-5, 
@@ -421,6 +456,11 @@ def main():
         config.update_model_param("gradient_clip_value", args.grad_clip)
         print(f"Using gradient clipping max norm: {args.grad_clip}")
         
+    # Set early stopping patience if provided
+    if args.patience is not None:
+        config.update_model_param("early_stopping_patience", args.patience)
+        print(f"Using early stopping patience: {args.patience}")
+        
     # Set reproducibility parameters if provided
     if args.seed is not None:
         config.update_model_param("random_seed", args.seed)
@@ -460,7 +500,7 @@ def main():
     # If dry run, just print configuration and exit
     if args.dry_run:
         print("\n=== DRY RUN - CONFIGURATION VALIDATION ===")
-        print(f"Model type: Swin-Tiny")
+        print(f"Model type: SwinV2-Tiny")
         print(f"Training data: {args.train_csv} ({args.train_dir})")
         print(f"Validation data: {val_csv} ({val_dir})")
         print(f"Binary mode: {args.binary}")
@@ -473,6 +513,7 @@ def main():
         print(f"Class distribution: {config.class_distribution}")
         print(f"Weight decay: {config.get_model_param('weight_decay')}")
         print(f"Label smoothing: {config.get_model_param('label_smoothing')}")
+        print(f"Early stopping patience: {config.get_model_param('early_stopping_patience')}")
         if resume_checkpoint:
             print(f"Resuming from: {resume_checkpoint}")
         print("=== CONFIGURATION VALID ===\n")

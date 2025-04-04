@@ -72,28 +72,17 @@ class ModelCheckpoint:
                 # Update best value
                 self.best_values[metric] = current_value
                 
-                # Save model
+                # Save model with simpler name without the metric in the filename
                 save_path = os.path.join(
                     self.output_dir, 
-                    f"{self.prefix}receipt_counter_{model_type}_best_{metric}.pth"
+                    f"{self.prefix}receipt_counter_{model_type}_best.pth"
                 )
                 ModelFactory.save_model(model, save_path)
                 
                 if self.verbose:
-                    print(f"Saved model with best {metric}: {current_value:.4f}")
+                    print(f"Saved model with {metric}: {current_value:.4f}")
                 
                 self.improved = True
-        
-        # Save a comprehensive best model if any metric improved
-        if self.improved:
-            save_path = os.path.join(
-                self.output_dir, 
-                f"{self.prefix}receipt_counter_{model_type}_best.pth"
-            )
-            ModelFactory.save_model(model, save_path)
-            
-            if self.verbose:
-                print(f"Saved comprehensive best model")
         
         return self.improved
 
@@ -217,6 +206,10 @@ def validate(model, dataloader, criterion, device):
             # Class-wise accuracy
             for i in range(batch_size):
                 label = targets[i].item()
+                if label not in class_total:
+                    # Initialize if we encounter a new label not in our dictionary
+                    class_total[label] = 0
+                    class_correct[label] = 0
                 class_total[label] += 1
                 if predicted[i] == targets[i]:
                     class_correct[label] += 1

@@ -149,8 +149,8 @@ def train_model(
     # Training metrics
     history = {"train_loss": [], "val_loss": [], "val_acc": [], "val_balanced_acc": [], "val_f1_macro": []}
 
-    # For early stopping - get patience from config
-    patience = config.get_model_param("early_stopping_patience", 8)
+    # For early stopping - get patience from config or CLI args
+    patience = config.get_model_param("early_stopping_patience")
     patience_counter = 0
     best_balanced_acc = 0
     best_f1_macro = 0  # Also track F1 macro improvement
@@ -246,16 +246,6 @@ def train_model(
     # Save final model
     ModelFactory.save_model(model, output_path / "receipt_counter_vit_final.pth")
 
-    # Generate validation plots using the unified functions
-    metrics = validate(model, val_loader, criterion, device)
-    
-    # Plot confusion matrix
-    accuracy, balanced_accuracy = plot_confusion_matrix(
-        metrics['predictions'],
-        metrics['targets'],
-        output_path=output_path / "vit_classification_results.png",
-    )
-
     # Save training history
     pd.DataFrame(history).to_csv(
         output_path / "vit_classification_history.csv", index=False
@@ -266,10 +256,50 @@ def train_model(
         history,
         output_path=output_path / "vit_classification_curves.png"
     )
+    
+    # Load the best model for final evaluation
+    print("\nLoading best model for final evaluation...")
+    best_model_path = output_path / "receipt_counter_vit_best.pth"
+    if best_model_path.exists():
+        # Load best model
+        best_model = ModelFactory.load_model(best_model_path, model_type="vit").to(device)
+        
+        # Evaluate best model
+        best_metrics = validate(best_model, val_loader, criterion, device)
+        
+        # Plot confusion matrix for best model
+        accuracy, balanced_accuracy = plot_confusion_matrix(
+            best_metrics['predictions'],
+            best_metrics['targets'],
+            output_path=output_path / "vit_classification_results.png",
+        )
+        
+        # Get F1 score from best model
+        f1_macro = best_metrics['f1_macro']
 
-    print("\nFinal Results:")
-    print(f"Accuracy: {accuracy:.2%}")
-    print(f"Balanced Accuracy: {balanced_accuracy:.2%}")
+        print("\nBest Model Results:")
+        print(f"Accuracy: {accuracy:.2%}")
+        print(f"F1 Macro: {f1_macro:.2%}")
+        print(f"Balanced Accuracy: {balanced_accuracy:.2%}")
+    else:
+        # If best model doesn't exist for some reason, evaluate the final model
+        print("Best model not found. Evaluating final model instead.")
+        metrics = validate(model, val_loader, criterion, device)
+        
+        # Plot confusion matrix
+        accuracy, balanced_accuracy = plot_confusion_matrix(
+            metrics['predictions'],
+            metrics['targets'],
+            output_path=output_path / "vit_classification_results.png",
+        )
+        
+        # Get F1 score
+        f1_macro = metrics['f1_macro']
+
+        print("\nFinal Model Results:")
+        print(f"Accuracy: {accuracy:.2%}")
+        print(f"F1 Macro: {f1_macro:.2%}")
+        print(f"Balanced Accuracy: {balanced_accuracy:.2%}")
 
     print(f"\nTraining complete! Models saved to {output_path}/")
     return model
@@ -316,6 +346,10 @@ def main():
     training_group.add_argument(
         "--batch_size", "-b", type=int, default=16, 
         help="Batch size for training (default: 16)"
+    )
+    training_group.add_argument(
+        "--patience", "-p", type=int,
+        help="Early stopping patience (epochs without improvement before stopping)"
     )
     training_group.add_argument(
         "--lr", "-l", type=float, default=5e-5, 
@@ -423,6 +457,11 @@ def main():
         config.update_model_param("gradient_clip_value", args.grad_clip)
         print(f"Using gradient clipping max norm: {args.grad_clip}")
         
+    # Set early stopping patience if provided
+    if args.patience is not None:
+        config.update_model_param("early_stopping_patience", args.patience)
+        print(f"Using early stopping patience: {args.patience}")
+        
     # Set reproducibility parameters if provided
     if args.seed is not None:
         config.update_model_param("random_seed", args.seed)
@@ -475,6 +514,8 @@ def main():
         print(f"Class distribution: {config.class_distribution}")
         print(f"Weight decay: {config.get_model_param('weight_decay')}")
         print(f"Label smoothing: {config.get_model_param('label_smoothing')}")
+        print(f"Early stopping patience: {config.get_model_param('early_stopping_patience')}")
+        
         if resume_checkpoint:
             print(f"Resuming from: {resume_checkpoint}")
         print("=== CONFIGURATION VALID ===\n")
