@@ -489,9 +489,10 @@ def main():
         config.update_model_param("label_smoothing", args.label_smoothing)
         print(f"Using custom label smoothing: {args.label_smoothing}")
         
-    # Set backbone learning rate multiplier
-    config.update_model_param("backbone_lr_multiplier", args.backbone_lr_multiplier)
-    print(f"Using backbone learning rate multiplier: {args.backbone_lr_multiplier}")
+    # Set backbone learning rate multiplier if provided
+    if args.backbone_lr_multiplier is not None:
+        config.update_model_param("backbone_lr_multiplier", args.backbone_lr_multiplier)
+        print(f"Using backbone learning rate multiplier: {args.backbone_lr_multiplier}")
     
     # Set gradient clipping if specified
     if args.grad_clip is not None:
@@ -546,7 +547,7 @@ def main():
         epochs = args.epochs if args.epochs is not None else config.get_model_param("epochs")
         batch_size = args.batch_size if args.batch_size is not None else config.get_model_param("batch_size")
         lr = args.lr if args.lr is not None else config.get_model_param("learning_rate")
-        backbone_lr_multiplier = args.backbone_lr_multiplier if args.backbone_lr_multiplier is not None else config.get_model_param("backbone_lr_multiplier")
+        backbone_lr_multiplier = args.backbone_lr_multiplier if args.backbone_lr_multiplier is not None else config.get_model_param("backbone_lr_multiplier", 0.1)
         augment = not args.no_augment if args.no_augment is not None else config.get_model_param("data_augmentation")
         
         print("\n=== DRY RUN - CONFIGURATION VALIDATION ===")
