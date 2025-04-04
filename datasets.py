@@ -106,7 +106,7 @@ def create_data_loaders(
     train_dir, 
     val_csv=None, 
     val_dir=None, 
-    batch_size=16, 
+    batch_size=None, 
     augment_train=True, 
     binary=False,
     train_val_split=0.8
@@ -130,6 +130,9 @@ def create_data_loaders(
     # Get configuration
     config = get_config()
     num_workers = config.get_model_param("num_workers", 4)
+    # Use batch_size from config if not explicitly provided
+    if batch_size is None:
+        batch_size = config.get_model_param("batch_size", 8)
     
     # Ensure dataset directories exist
     if not os.path.exists(train_dir):

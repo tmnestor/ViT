@@ -66,17 +66,35 @@ def main():
         default="microsoft/swinv2-tiny-patch4-window8-256",
         help="HuggingFace model name to download (default: microsoft/swinv2-tiny-patch4-window8-256)",  # noqa: E501
     )
+    parser.add_argument(
+        "--model_type",
+        choices=["tiny", "large"],
+        default="tiny",
+        help="Type of SwinV2 model to download: tiny (256x256) or large (192x192)",
+    )
     parser.add_argument("--output_dir", help="Optional directory to save model files")
 
     args = parser.parse_args()
-    download_model(args.model_name, args.output_dir)
+    
+    # Determine model name based on model type if not explicitly specified
+    if args.model_name == "microsoft/swinv2-tiny-patch4-window8-256" and args.model_type != "tiny":
+        if args.model_type == "large":
+            model_name = "microsoft/swinv2-large-patch4-window12-192-22k"
+        else:
+            model_name = args.model_name
+    else:
+        model_name = args.model_name
+        
+    print(f"Using model: {model_name}")
+    download_model(model_name, args.output_dir)
 
     # Print instructions for offline use
+    model_type_arg = "swinv2" if args.model_type == "tiny" else "swinv2-large"
     print("\nTo use the downloaded model in offline mode:")
     print(
-        "python train_swin_classification.py --offline --train_csv receipt_dataset_swinv2/train.csv --train_dir receipt_dataset_swinv2/train \\\n"  # noqa: E501
+        f"python train_swin_classification.py --model_type {model_type_arg} --offline --train_csv receipt_dataset_swinv2/train.csv --train_dir receipt_dataset_swinv2/train \\\n"  # noqa: E501
         "                              --val_csv receipt_dataset_swinv2/val.csv --val_dir receipt_dataset_swinv2/val \\\n"  # noqa: E501
-        "                              --output_dir models/swinv2 --epochs 20 --batch_size 16"  # noqa: E501
+        "                              --output_dir models/swinv2 --epochs 20"  # noqa: E501
     )
 
 

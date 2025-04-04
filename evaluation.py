@@ -23,7 +23,7 @@ def evaluate_model(
     model_path, 
     test_csv, 
     test_dir, 
-    batch_size=16, 
+    batch_size=None, 
     output_dir="evaluation", 
     config_path=None, 
     binary=False,
@@ -112,8 +112,11 @@ def evaluate_model(
     
     # Initialize test dataset
     
-    # Get num_workers from config
+    # Get parameters from config
     num_workers = config.get_model_param("num_workers", 4)
+    # Use batch_size from config if not explicitly provided
+    if batch_size is None:
+        batch_size = config.get_model_param("batch_size", 8)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
     
     # Evaluation

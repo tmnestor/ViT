@@ -23,7 +23,8 @@ class ModelFactory:
     MODEL_PATHS = {
         "vit": "google/vit-base-patch16-224",
         "swin": "microsoft/swin-tiny-patch4-window7-224",
-        "swinv2": "microsoft/swinv2-tiny-patch4-window8-256"
+        "swinv2": "microsoft/swinv2-tiny-patch4-window8-256",
+        "swinv2-large": "microsoft/swinv2-large-patch4-window12-192-22k"
     }
     
     @classmethod
@@ -31,7 +32,7 @@ class ModelFactory:
         """Create a transformer model for receipt counting.
         
         Args:
-            model_type: Type of model to create (only "swinv2" is fully supported)
+            model_type: Type of model to create ("swinv2" and "swinv2-large" are fully supported)
             pretrained: Whether to load pretrained weights from Hugging Face
             num_classes: Number of output classes. If None, will be determined from config
             verbose: Whether to show warnings about weight initialization
@@ -50,6 +51,14 @@ class ModelFactory:
         
         # Get configuration
         config = get_config()
+        
+        # Set model-specific parameters based on model type
+        if model_type == "swinv2-large":
+            # SwinV2-Large uses 192x192 images by default
+            config.update_model_param("image_size", 192)
+        elif model_type == "swinv2":
+            # SwinV2-Tiny uses 256x256 images by default
+            config.update_model_param("image_size", 256)
         
         # Get number of classes from config if not provided
         if num_classes is None:
@@ -77,10 +86,10 @@ class ModelFactory:
                     num_labels=num_classes,
                     ignore_mismatched_sizes=True
                 )
-            elif model_type == "swinv2":
+            elif model_type == "swinv2" or model_type == "swinv2-large":
                 from transformers import Swinv2ForImageClassification
                 model = Swinv2ForImageClassification.from_pretrained(
-                    cls.MODEL_PATHS["swinv2"], 
+                    cls.MODEL_PATHS[model_type], 
                     num_labels=num_classes,
                     ignore_mismatched_sizes=True
                 )
@@ -144,7 +153,7 @@ class ModelFactory:
         torch.save(model.state_dict(), path)
     
     @classmethod
-    def load_model(cls, path, num_classes=None, strict=True, mode="eval"):
+    def load_model(cls, path, num_classes=None, strict=True, mode="eval", model_type="swinv2"):
         """Load a saved SwinV2 transformer model.
         
         Args:
@@ -152,19 +161,20 @@ class ModelFactory:
             num_classes: Number of output classes. If None, will be determined from config
             strict: Whether to enforce strict parameter matching
             mode: "train" for training mode, "eval" for evaluation mode
+            model_type: The type of model to load ("swinv2" or "swinv2-large")
             
         Returns:
-            Loaded SwinV2 model
+            Loaded transformer model
         """
-        # We only support SwinV2 models now
-        model_type = "swinv2"
-        print(f"Loading model from {path} as a SwinV2 model")
+        # Validate model type
+        if model_type not in cls.MODEL_PATHS:
+            raise ValueError(f"Unsupported model type: {model_type}. "
+                           f"Supported types: {list(cls.MODEL_PATHS.keys())}")
+            
+        print(f"Loading model from {path} as a {model_type} model")
         
         # Load state dict first to inspect
         state_dict = torch.load(path)
-        
-        # Only SwinV2 models are supported
-        model_type = "swinv2"
             
         # Create empty model structure without pretrained weights
         model = cls.create_transformer(

@@ -29,13 +29,14 @@ def train_model(
     train_dir,
     val_csv=None,
     val_dir=None,
-    epochs=15,
-    batch_size=16,
-    lr=1e-4,
-    output_dir="models",
+    epochs=None,
+    batch_size=None,
+    lr=None,
+    output_dir=None,
     binary=False,
-    augment=True,
+    augment=None,
     resume_checkpoint=None,
+    model_type=None,
 ):
     """
     Train the SwinV2 Transformer model for receipt counting as a classification task.
@@ -45,23 +46,45 @@ def train_model(
         train_dir: Directory containing training images
         val_csv: Path to validation CSV file (optional)
         val_dir: Directory containing validation images (optional)
-        epochs: Number of training epochs
-        batch_size: Batch size for training
-        lr: Learning rate
-        output_dir: Directory to save trained model and results
+        epochs: Number of training epochs (default from config)
+        batch_size: Batch size for training (default from config)
+        lr: Learning rate (default from config)
+        output_dir: Directory to save trained model and results (default from config)
         binary: If True, use binary classification (0 vs 1+ receipts)
-        augment: If True, apply data augmentation during training
+        augment: If True, apply data augmentation during training (default from config)
         resume_checkpoint: Path to checkpoint to resume training from (optional)
+        model_type: Type of SwinV2 model to use ("swinv2" or "swinv2-large") (default from config)
         
     Returns:
         The best model from training, NOT the final model from the last epoch
     """
+    # Get configuration singleton
+    config = get_config()
+    
+    # Get parameters from config or use provided values
+    if model_type is None:
+        model_type = config.get_model_param("model_type", "swinv2")
+    
+    if lr is None:
+        lr = config.get_model_param("learning_rate", 5e-5)
+    
+    if batch_size is None:
+        batch_size = config.get_model_param("batch_size", 8)
+    
+    if epochs is None:
+        epochs = config.get_model_param("epochs", 30)
+    
+    if output_dir is None:
+        output_dir = config.get_model_param("output_dir", "models")
+    
+    if augment is None:
+        augment = config.get_model_param("data_augmentation", True)
+    
     # Create output directory
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
     
     # Configure for binary classification if requested
-    config = get_config()
     if binary:
         config.set_binary_mode(True)
         print("Using binary classification (multiple receipts or not)")
@@ -72,7 +95,7 @@ def train_model(
         else:
             print(f"Using multi-class classification (0-{len(config.class_distribution)-1} receipts)")
 
-    # Get number of workers from config
+    # Get additional parameters from config
     num_workers = config.get_model_param("num_workers", 4)
     
     # Create data loaders using the unified function
@@ -98,11 +121,11 @@ def train_model(
     if resume_checkpoint:
         checkpoint_path = Path(resume_checkpoint)
         print(f"Loading model checkpoint from {checkpoint_path}")
-        model = ModelFactory.load_model(checkpoint_path).to(device)
-        print("Resumed SwinV2 Transformer model from checkpoint")
+        model = ModelFactory.load_model(checkpoint_path, model_type=model_type).to(device)
+        print(f"Resumed {model_type} Transformer model from checkpoint")
     else:
-        model = ModelFactory.create_transformer(model_type="swinv2", pretrained=True).to(device)
-        print("Initialized new SwinV2 Transformer model using Hugging Face transformers")
+        model = ModelFactory.create_transformer(model_type=model_type, pretrained=True).to(device)
+        print(f"Initialized new {model_type} Transformer model using Hugging Face transformers")
 
     # Loss and optimizer with more robust learning rate control
     # Get class weights from configuration system
@@ -241,15 +264,16 @@ def train_model(
         improved = checkpoint.check_improvement(
             metrics_dict=metrics,
             model=model,
-            model_type="swinv2"
+            model_type=model_type
         )
         
         # If model improved, keep a copy in memory too
         if improved:
             # Create a deep copy of the model
             best_model = ModelFactory.load_model(
-                output_path / "receipt_counter_swinv2_best.pth",
-                mode="eval"
+                output_path / f"receipt_counter_{model_type}_best.pth",
+                mode="eval",
+                model_type=model_type
             )
         
         # Use the already created EarlyStopping utility to decide whether to stop training
@@ -259,17 +283,17 @@ def train_model(
             break
 
     # Save final model
-    ModelFactory.save_model(model, output_path / "receipt_counter_swinv2_final.pth")
+    ModelFactory.save_model(model, output_path / f"receipt_counter_{model_type}_final.pth")
 
     # Save training history
     pd.DataFrame(history).to_csv(
-        output_path / "swinv2_classification_history.csv", index=False
+        output_path / f"{model_type}_classification_history.csv", index=False
     )
 
     # Plot training curves using the unified function
     plot_training_curves(
         history,
-        output_path=output_path / "swinv2_classification_curves.png"
+        output_path=output_path / f"{model_type}_classification_curves.png"
     )
     
     # We should already have the best model in memory
@@ -281,10 +305,10 @@ def train_model(
         best_model = best_model.to(device)
     else:
         # As a fallback, try to load from disk
-        best_model_path = output_path / "receipt_counter_swinv2_best.pth"
+        best_model_path = output_path / f"receipt_counter_{model_type}_best.pth"
         if best_model_path.exists():
             print(f"Loading best model from {best_model_path}")
-            best_model = ModelFactory.load_model(best_model_path).to(device)
+            best_model = ModelFactory.load_model(best_model_path, model_type=model_type).to(device)
         else:
             # If best model doesn't exist for some reason, use the final model
             print("WARNING: Best model not found. Using final model instead.")
@@ -297,7 +321,7 @@ def train_model(
     accuracy, balanced_accuracy = plot_confusion_matrix(
         best_metrics['predictions'],
         best_metrics['targets'],
-        output_path=output_path / "swinv2_classification_results.png",
+        output_path=output_path / f"{model_type}_classification_results.png",
     )
     
     # Get F1 score from best model
@@ -320,7 +344,7 @@ def train_model(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Train a SwinV2-Tiny model for receipt counting as classification"
+        description="Train a SwinV2 model for receipt counting as classification"
     )
     
     # Data input options
@@ -353,24 +377,28 @@ def main():
     # Training parameters
     training_group = parser.add_argument_group('Training')
     training_group.add_argument(
-        "--epochs", "-e", type=int, default=30, 
-        help="Number of training epochs (default: 30)"
+        "--model_type", type=str, choices=["swinv2", "swinv2-large"],
+        help="Type of SwinV2 model to use (default from config)"
     )
     training_group.add_argument(
-        "--batch_size", "-b", type=int, default=16, 
-        help="Batch size for training (default: 16)"
+        "--epochs", "-e", type=int,
+        help="Number of training epochs (default from config)"
+    )
+    training_group.add_argument(
+        "--batch_size", "-b", type=int,
+        help="Batch size for training (uses config default if not specified)"
     )
     training_group.add_argument(
         "--patience", "-p", type=int,
         help="Early stopping patience (epochs without improvement before stopping)"
     )
     training_group.add_argument(
-        "--lr", "-l", type=float, default=5e-5, 
-        help="Learning rate (default: 5e-5)"
+        "--lr", "-l", type=float,
+        help="Learning rate (default from config)"
     )
     training_group.add_argument(
-        "--backbone_lr_multiplier", "-blrm", type=float, default=0.1,
-        help="Multiplier for backbone learning rate relative to classifier (default: 0.1)"
+        "--backbone_lr_multiplier", "-blrm", type=float,
+        help="Multiplier for backbone learning rate relative to classifier (default from config)"
     )
     training_group.add_argument(
         "--weight_decay", "-wd", type=float,
@@ -513,15 +541,23 @@ def main():
     
     # If dry run, just print configuration and exit
     if args.dry_run:
+        # Get config values for any None args
+        model_type = args.model_type if args.model_type is not None else config.get_model_param("model_type")
+        epochs = args.epochs if args.epochs is not None else config.get_model_param("epochs")
+        batch_size = args.batch_size if args.batch_size is not None else config.get_model_param("batch_size")
+        lr = args.lr if args.lr is not None else config.get_model_param("learning_rate")
+        backbone_lr_multiplier = args.backbone_lr_multiplier if args.backbone_lr_multiplier is not None else config.get_model_param("backbone_lr_multiplier")
+        augment = not args.no_augment if args.no_augment is not None else config.get_model_param("data_augmentation")
+        
         print("\n=== DRY RUN - CONFIGURATION VALIDATION ===")
-        print(f"Model type: SwinV2-Tiny")
+        print(f"Model type: {model_type}")
         print(f"Training data: {args.train_csv} ({args.train_dir})")
         print(f"Validation data: {val_csv} ({val_dir})")
         print(f"Binary mode: {args.binary}")
-        print(f"Data augmentation: {'disabled' if args.no_augment else 'enabled'}")
-        print(f"Epochs: {args.epochs}")
-        print(f"Batch size: {args.batch_size}")
-        print(f"Learning rate - Classifier: {args.lr}, Backbone: {args.lr * args.backbone_lr_multiplier}")
+        print(f"Data augmentation: {'disabled' if not augment else 'enabled'}")
+        print(f"Epochs: {epochs}")
+        print(f"Batch size: {batch_size}")
+        print(f"Learning rate - Classifier: {lr}, Backbone: {lr * backbone_lr_multiplier}")
         print(f"Output directory: {args.output_dir}")
         print(f"Reproducibility: seed={config.get_model_param('random_seed')}, deterministic={config.get_model_param('deterministic_mode')}")
         print(f"Class distribution: {config.class_distribution}")
@@ -545,6 +581,7 @@ def main():
         binary=args.binary,
         augment=(not args.no_augment),  # Pass augmentation flag to train_model
         resume_checkpoint=resume_checkpoint if args.resume else None,
+        model_type=args.model_type,
     )
 
 

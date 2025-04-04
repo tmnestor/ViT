@@ -23,26 +23,32 @@ DEFAULT_BINARY_DISTRIBUTION = [0.6, 0.4]
 # Default model architecture parameters
 DEFAULT_MODEL_PARAMS = {
     # Image parameters
-    # "image_size": 224,
-    # "normalization_mean": [0.485, 0.456, 0.406],  # ImageNet mean
-    # "normalization_std": [0.229, 0.224, 0.225],  # ImageNet std
-    "image_size": 256,  # SwinV2 uses 256x256 images
     "normalization_mean": [0.5, 0.5, 0.5],  # SwinV2 mean
     "normalization_std": [0.5, 0.5, 0.5],  # SwinV2 std
+    # SwinV2-Large uses a default of 192x192 images, will be set in model initialization
+    # Model selection
+    "model_type": "swinv2",  # Default model type: "swinv2" or "swinv2-large"
     # Classifier architecture
     "classifier_dims": [768, 512, 256],  # Hidden layer dimensions
     "dropout_rates": [0.4, 0.4, 0.3],  # Dropout rates for each layer
     # Training parameters
-    "batch_size": 16,
+    "batch_size": 8,
     "learning_rate": 5e-5,
+    "backbone_lr_multiplier": 0.01,  # Multiplier for backbone lr relative to classifier
     "weight_decay": 0.01,
     "num_workers": 4,
     "label_smoothing": 0.1,
+    "epochs": 20,  # Default number of training epochs
     "lr_scheduler_factor": 0.5,
     "lr_scheduler_patience": 2,
     "min_lr": 1e-6,
     "gradient_clip_value": 1.0,
     "early_stopping_patience": 3,
+    # Data parameters
+    "train_val_split": 0.8,  # Default train/val split ratio when no separate val set
+    "data_augmentation": True,  # Whether to use data augmentation by default
+    # Output paths
+    "output_dir": "models",  # Default output directory for trained models
     # Reproducibility parameters
     "random_seed": 42,
     "deterministic_mode": True,

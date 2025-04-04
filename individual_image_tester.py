@@ -19,12 +19,19 @@ except ImportError:
     print("pip install opencv-python-headless")
     sys.exit(1)
 
-def process_image(model_path, image_path, enhance=True, config_path=None):
+def process_image(model_path, image_path, enhance=None, config_path=None, model_type=None):
     """Process an image using the trained model."""
     # Load configuration
     config = get_config()
     if config_path:
         config.load_from_file(config_path, silent=False)  # Explicitly show this load
+    
+    # Get parameters from config if not explicitly provided
+    if model_type is None:
+        model_type = config.get_model_param("model_type", "swinv2")
+    
+    if enhance is None:
+        enhance = True  # Default is to enhance images
     
     # Get the best available device
     device = get_device()
@@ -32,14 +39,13 @@ def process_image(model_path, image_path, enhance=True, config_path=None):
     # Load model based on model path
     print(f"Loading model from {model_path}...")
     
-    # Now we only support SwinV2 models
-    
     try:
         # Load model using the factory with strict=False to allow for class count changes
         model = ModelFactory.load_model(
             model_path,
             strict=False,
-            mode="eval"
+            mode="eval",
+            model_type=model_type
         )
         model = model.to(device)
         print("Successfully loaded model!")
@@ -142,6 +148,8 @@ if __name__ == "__main__":
     parser.add_argument("--image", required=True, help="Path to scanned image")
     parser.add_argument("--model", default="models/receipt_counter_swinv2_best.pth",
                        help="Path to model (use the 'best' model, not the 'final' model)")
+    parser.add_argument("--model-type", choices=["swinv2", "swinv2-large"],
+                       help="Type of model to use (default from config)")
     parser.add_argument("--no-enhance", action="store_true",
                        help="Skip image enhancement (use if OpenCV has issues)")
     parser.add_argument("--config", help="Path to configuration JSON file")
@@ -172,7 +180,8 @@ if __name__ == "__main__":
     try:
         process_image(args.model, args.image, 
                       enhance=not args.no_enhance, 
-                      config_path=args.config)
+                      config_path=args.config,
+                      model_type=args.model_type)
     except Exception as e:
         print(f"Error: {e}")
         sys.exit(1)

@@ -15,8 +15,8 @@ def main():
                        help="Path to CSV file containing test data")
     parser.add_argument("--test_dir", required=True,
                        help="Directory containing test images")
-    parser.add_argument("--batch_size", type=int, default=16,
-                       help="Batch size (default: 16)")
+    parser.add_argument("--batch_size", type=int,
+                       help="Batch size (uses config default if not specified)")
     parser.add_argument("--model_variant", default="best",
                        choices=["best", "best_bacc", "best_f1", "final"],
                        help="Model variant to evaluate (default: best)")

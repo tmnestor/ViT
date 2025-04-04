@@ -1,6 +1,6 @@
 # SwinV2 Receipt Classifier
 
-A computer vision project using the SwinV2 Transformer architecture for classifying the number of receipts in images.
+A computer vision project using the SwinV2 Transformer architecture for classifying the number of receipts in images. Supports both SwinV2-Tiny and SwinV2-Large models with a centralized configuration system.
 
 ## Purpose
 
@@ -37,17 +37,15 @@ python create_receipt_collages.py --num_collages 300
 # 2. Create dataset from collages
 python create_collage_dataset.py --collage_dir receipt_collages --output_dir receipt_dataset
 
-# 3. Train the model
+# 3. Train the model (using SwinV2-Tiny by default)
 python train_swinv2_classification.py -tc receipt_dataset/train.csv -td receipt_dataset/train \
                               -vc receipt_dataset/val.csv -vd receipt_dataset/val \
-                              -e 20 -b 32 -o models -s 42 -d \
-                              -l 5e-5
+                              -s 42 -d
 
 # 4. Evaluate the model
 python evaluate_swinv2_classifier.py --model models/receipt_counter_swinv2_best.pth \
                                    --test_csv receipt_dataset/test.csv \
-                                   --test_dir receipt_dataset/test \
-                                   --output_dir evaluation/swinv2
+                                   --test_dir receipt_dataset/test
 
 # 5. Test a single image
 python individual_image_tester.py --image receipt_collages/collage_254_3_receipts.jpg \
@@ -56,35 +54,67 @@ python individual_image_tester.py --image receipt_collages/collage_254_3_receipt
 
 ### Advanced Usage
 
+#### Model Options
+
+```bash
+# Train with SwinV2-Tiny model (default)
+python train_swinv2_classification.py --model_type swinv2
+
+# Train with SwinV2-Large model (22K pre-trained)
+python train_swinv2_classification.py --model_type swinv2-large
+
+# Download model weights for offline use
+python swinv2_model_download.py --model_type tiny
+python swinv2_model_download.py --model_type large
+```
+
 #### Training Options
 
 ```bash
 # Train with custom class distribution (adjust for different dataset imbalance)
-python train_swinv2_classification.py --class_dist "0.4,0.3,0.3" -e 20 -b 32
+python train_swinv2_classification.py --class_dist "0.4,0.3,0.3"
 
-# Train with gradient clipping and differential learning rates
-python train_swinv2_classification.py -e 20 -b 16 -l 5e-5 --backbone_lr_multiplier 0.1 --grad_clip 2.0
+# Train with custom gradient clipping and differential learning rates
+python train_swinv2_classification.py --lr 5e-5 --backbone_lr_multiplier 0.1 --grad_clip 2.0
 
 # Resume training from a checkpoint
-python train_swinv2_classification.py -r models/receipt_counter_swinv2_best.pth -e 10
+python train_swinv2_classification.py -r models/receipt_counter_swinv2_best.pth
 
 # Dry run to validate configuration
-python train_swinv2_classification.py --dry-run -e 30 -b 16 -s 42
+python train_swinv2_classification.py --dry-run -s 42
 ```
 
 #### Evaluation Options
 
 ```bash
-# Evaluate 
+# Evaluate SwinV2-Tiny model
 python evaluate_swinv2_classifier.py \
   --model models/receipt_counter_swinv2_best.pth \
   --test_csv receipt_dataset/test.csv \
   --test_dir receipt_dataset/test \
-  --output_dir evaluation/swinv2_tiny \
   [--no-calibration] # without calibration
+
+# Evaluate SwinV2-Large model
+python evaluate_swinv2_classifier.py \
+  --model models/receipt_counter_swinv2-large_best.pth \
+  --test_csv receipt_dataset/test.csv \
+  --test_dir receipt_dataset/test
 
 # Evaluate in binary mode (0 vs 1+ receipts)
 python evaluate_swinv2_classifier.py --model models/receipt_counter_swinv2_best.pth --binary
+```
+
+#### Testing Individual Images
+
+```bash
+# Test with SwinV2-Tiny model
+python individual_image_tester.py --image receipt_collages/collage_254_3_receipts.jpg \
+                               --model models/receipt_counter_swinv2_best.pth
+
+# Test with SwinV2-Large model
+python individual_image_tester.py --image receipt_collages/collage_254_3_receipts.jpg \
+                               --model models/receipt_counter_swinv2-large_best.pth \
+                               --model-type swinv2-large
 ```
 
 ## Theory
@@ -97,12 +127,24 @@ SwinV2 is an advanced vision transformer developed by Microsoft Research that ad
 2. **Log-Spaced Continuous Position Bias**: Enables better transfer between different image resolutions
 3. **Self-Supervised Pre-training (SimMIM)**: Reduces the need for labeled data
 
-The SwinV2-Tiny variant used in this project has:
+The project supports two SwinV2 variants:
+
+**SwinV2-Tiny**:
 - Patch size: 4 pixels
 - Window size: 8
+- Input resolution: 256x256
 - Embedding dimension: 96
 - Layer depths: [2, 2, 6, 2]
 - Attention heads: [3, 6, 12, 24]
+
+**SwinV2-Large**:
+- Patch size: 4 pixels
+- Window size: 12
+- Input resolution: 192x192
+- Embedding dimension: 192
+- Layer depths: [2, 2, 18, 2]
+- Attention heads: [6, 12, 24, 48]
+- Pre-trained on ImageNet-22K
 
 ### Classification Metrics
 
@@ -130,11 +172,48 @@ This project implements a principled approach to handle class imbalance:
 
 This two-stage approach ensures the model learns effectively from minority classes while producing properly calibrated predictions that match the true class distribution.
 
+## Configuration System
+
+The project uses a centralized configuration system for all parameters:
+
+```python
+# Default values in config.py
+DEFAULT_MODEL_PARAMS = {
+    # Image parameters
+    "image_size": 256,  # SwinV2-Tiny uses 256x256 images by default
+    
+    # Model selection
+    "model_type": "swinv2",  # "swinv2" or "swinv2-large"
+    
+    # Training parameters
+    "batch_size": 8,
+    "learning_rate": 5e-5,
+    "backbone_lr_multiplier": 0.1,
+    "epochs": 30,
+    "weight_decay": 0.01,
+    "label_smoothing": 0.1,
+    
+    # Reproducibility parameters
+    "random_seed": 42,
+    "deterministic_mode": True,
+}
+```
+
+### Configuration Priority
+
+Parameters are determined in the following order:
+
+1. Command-line arguments (highest priority)
+2. Environment variables (e.g., `RECEIPT_BATCH_SIZE`, `RECEIPT_LEARNING_RATE`)  
+3. Config JSON file (if specified with `--config`)
+4. Default values in `config.py` (lowest priority)
+
 ## Project Structure
 
 - **Core Model Files**
   - `model_factory.py` - Factory pattern for creating and loading models
   - `config.py` - Centralized configuration system
+  - `swinv2_model_download.py` - Download pre-trained models
 
 - **Dataset & Training**
   - `datasets.py` - Dataset classes

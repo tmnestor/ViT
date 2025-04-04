@@ -8,21 +8,21 @@
 # Train ViT-Base model with reproducibility
 python train_vit_classification.py -tc receipt_dataset/train.csv -td receipt_dataset/train \
                           -vc receipt_dataset/val.csv -vd receipt_dataset/val \
-                          -e 20 -b 32 -o models -s 42 -d \
+                          -e 20 -b 8 -o models -s 42 -d \
                           -l 5e-5 
 
 # Train Swin-Tiny model with reproducibility
 python train_swin_classification.py -tc receipt_dataset/train.csv -td receipt_dataset/train \
                            -vc receipt_dataset/val.csv -vd receipt_dataset/val \
-                           -e 20 -b 32 -o models -s 42 -d \
+                           -e 20 -b 8 -o models -s 42 -d \
                            -l 5e-5
 
 # Resume training from a checkpoint
 python train_vit_classification.py -r models/receipt_counter_vit_best.pth \
-                          -e 10 -b 32 -o models
+                          -e 10 -b 8 -o models
 
 # Dry run to validate configuration
-python train_swin_classification.py --dry-run -e 30 -b 16 -s 42
+python train_swin_classification.py --dry-run -e 30 -b 8 -s 42
 ```
 
 ### CLI Options
@@ -142,7 +142,7 @@ export RECEIPT_CLASS_DIST="0.4,0.2,0.2,0.1,0.1"
 
 # Model parameters
 export RECEIPT_IMAGE_SIZE="256"
-export RECEIPT_BATCH_SIZE="32" 
+export RECEIPT_BATCH_SIZE="8" 
 export RECEIPT_LEARNING_RATE="1e-5"
 export RECEIPT_NUM_WORKERS="8"
 export RECEIPT_WEIGHT_DECAY="0.005"
