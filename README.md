@@ -36,6 +36,7 @@ pip install -r requirements.txt
 ### Quick Start
 
 ```bash
+
 # 1. Generate 100 individual receipt samples (in synthetic_receipts/samples)
 python create_synthetic_receipts.py --output_dir synthetic_receipts --num_collages 0
 
