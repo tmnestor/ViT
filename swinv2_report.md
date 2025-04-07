@@ -20,23 +20,23 @@ The SwinV2-Large model is an advanced hierarchical vision transformer developed 
 graph TD
     subgraph "SwinV2-Large Architecture"
         Input["Input Image (192×192×3)"] --> PatchEmbed["Patch Embedding (48×48×192)"]
-        PatchEmbed --> Stage1["Stage 1 (48×48×192)\n2 Blocks"]
+        PatchEmbed --> Stage1["Stage 1 (48×48×192)<br/>2 Blocks"]
         Stage1 --> Downsample1["Patch Merging (24×24×384)"]
-        Downsample1 --> Stage2["Stage 2 (24×24×384)\n2 Blocks"]
+        Downsample1 --> Stage2["Stage 2 (24×24×384)<br/>2 Blocks"]
         Stage2 --> Downsample2["Patch Merging (12×12×768)"]
-        Downsample2 --> Stage3["Stage 3 (12×12×768)\n18 Blocks"]
+        Downsample2 --> Stage3["Stage 3 (12×12×768)<br/>18 Blocks"]
         Stage3 --> Downsample3["Patch Merging (6×6×1536)"]
-        Downsample3 --> Stage4["Stage 4 (6×6×1536)\n2 Blocks"]
+        Downsample3 --> Stage4["Stage 4 (6×6×1536)<br/>2 Blocks"]
         Stage4 --> GlobalPool["Global Average Pooling (1536)"]
-        GlobalPool --> CustomClassifier["Custom Classifier Head\n3 Classes (0, 1, 2+ receipts)"]
+        GlobalPool --> CustomClassifier["Custom Classifier Head<br/>3 Classes (0, 1, 2+ receipts)"]
     end
 
     subgraph "Swin Transformer Block (STB)"
-        Block["Block Structure"] --> WMSA["Window Attention\nW-MSA + MLP"]
-        Block --> SWMSA["Shifted Window Attention\nSW-MSA + MLP"]
+        Block["Block Structure"] --> WMSA["Window Attention<br/>W-MSA + MLP"]
+        Block --> SWMSA["Shifted Window Attention<br/>SW-MSA + MLP"]
         
-        WMSA --> Details1["• Residual Post-Norm\n• Scaled Cosine Attention\n• Log-spaced Position Bias"]
-        SWMSA --> Details2["• Residual Post-Norm\n• Scaled Cosine Attention\n• Log-spaced Position Bias"]
+        WMSA --> Details1["• Residual Post-Norm<br/>• Scaled Cosine Attention<br/>• Log-spaced Position Bias"]
+        SWMSA --> Details2["• Residual Post-Norm<br/>• Scaled Cosine Attention<br/>• Log-spaced Position Bias"]
     end
 ```
 
