@@ -88,13 +88,45 @@ The dataset is created using the `create_synthetic_receipts.py` script, which ge
 3. **Collages of receipts** arranged in various configurations (0-5 receipts per image)
 4. **Payment receipts** that can be stapled on top of main receipts
 
+### Sample Images
+
+Below are examples of the synthetic images used for training:
+
+#### Individual Receipt
+![Individual Receipt](report_images/receipt_sample_1.jpg)
+*Fig 1: Individual synthetic receipt with realistic formatting and content*
+
+#### Single Receipt Image
+![Single Receipt](report_images/synthetic_001_1_receipts.jpg)
+*Fig 2: Training image containing a single receipt*
+
+#### Multiple Receipts Image
+![Two Receipts](report_images/synthetic_003_2_receipts.jpg)
+*Fig 3: Training image containing multiple receipts (2 receipts)*
+
+#### Tax Document (0 Receipts)
+![Tax Document](report_images/taxdoc_1.jpg)
+*Fig 4: Australian tax document used as 0-receipt example*
+
 ### Key Dataset Features
 
 - **Controlled class distribution**: Configurable probability distribution for different receipt counts
 - **Realistic variations**: Noise, rotations, creases, perforations, shadows, and edge effects
 - **Both portrait and landscape orientations**: Randomly chosen to mimic real phone photos
-- **Stapled payment receipts**: A configurable proportion of receipts have smaller payment receipts stapled on top
 - **Zero-receipt examples**: Uses Australian tax documents in portrait orientation
+
+### Stapled Payment Receipts
+
+A recent enhancement to the dataset generation is the addition of stapled payment receipts. This creates more realistic training data that mimics how real-world tax submissions often include payment slips stapled to main receipts.
+
+Key features of the stapled receipt implementation:
+- Configurable via the `--stapled_ratio` parameter (0.0-1.0)
+- Generates smaller payment receipts (typically 60% width, 50% height of main receipt)
+- Positions stapled receipts to partially overlap main receipts
+- Adds visible staple marks at overlap points
+- Applies realistic rotation for natural appearance
+
+The addition of stapled receipts increases training data realism without changing the receipt count, providing a more robust model that can identify receipts even when partially overlapped by payment slips.
 
 ### Dataset Composition
 
@@ -148,19 +180,12 @@ Class Accuracies:
 
 ### Confusion Matrix
 
-```mermaid
-graph LR
-    subgraph "Confusion Matrix"
-        style Conf fill:#f9f9f9,stroke:#333,stroke-width:1px
-        
-        Conf["
-        | Predicted ⟶<br>Actual ⟵ | 0 receipts | 1 receipt | 2+ receipts |
-        |------------------:|:----------:|:----------:|:------------:|
-        | **0 receipts**    | 100.00%    | 0.00%      | 0.00%        |
-        | **1 receipt**     | 0.00%      | 100.00%    | 0.00%        |
-        | **2+ receipts**   | 0.00%      | 1.59%      | 98.41%       |
-        "]
-    end
+```
+| Predicted→<br>Actual↓ | 0 receipts | 1 receipt | 2+ receipts |
+|:------------------:|:----------:|:----------:|:------------:|
+| **0 receipts**    | 100.00%    | 0.00%      | 0.00%        |
+| **1 receipt**     | 0.00%      | 100.00%    | 0.00%        |
+| **2+ receipts**   | 0.00%      | 1.59%      | 98.41%       |
 ```
 
 ### Analysis of Results
