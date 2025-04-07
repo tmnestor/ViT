@@ -180,13 +180,15 @@ Class Accuracies:
 
 ### Confusion Matrix
 
-```
-| Predicted→<br>Actual↓ | 0 receipts | 1 receipt | 2+ receipts |
-|:------------------:|:----------:|:----------:|:------------:|
-| **0 receipts**    | 100.00%    | 0.00%      | 0.00%        |
-| **1 receipt**     | 0.00%      | 100.00%    | 0.00%        |
-| **2+ receipts**   | 0.00%      | 1.59%      | 98.41%       |
-```
+The confusion matrix below shows the model's exceptional classification performance:
+
+| **Predicted→<br>Actual↓** | **0 receipts** | **1 receipt** | **2+ receipts** |
+|:------------------------:|:--------------:|:-------------:|:---------------:|
+| **0 receipts**           | **100.00%**    | 0.00%         | 0.00%           |
+| **1 receipt**            | 0.00%          | **100.00%**   | 0.00%           |
+| **2+ receipts**          | 0.00%          | 1.59%         | **98.41%**      |
+
+*Table 1: Confusion matrix showing perfect classification of 0 and 1 receipt classes, with 98.41% accuracy for the 2+ receipts class.*
 
 ### Analysis of Results
 
