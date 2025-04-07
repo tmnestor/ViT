@@ -36,32 +36,32 @@ pip install -r requirements.txt
 ### Quick Start
 
 ```bash
+# 1. Download model weights for offline use
+python huggingface_model_download.py --model_name "microsoft/swinv2-large-patch4-window12-192-22k" --output_dir /path/to/models/swinv2-large
 
-# 1. Generate additional synthetic receipts with full control
-python create_synthetic_receipts.py --num_collages 1000 --count_probs "0.3,0.3,0.2, 0.1, 0.1" --output_dir synthetic_receipts
+# 2. Generate synthetic receipts
+python create_synthetic_receipts.py --num_collages 1000 --count_probs "0.3,0.3,0.2,0.1,0.1" --output_dir synthetic_receipts
 
-# 4. Create dataset from collages
+# 3. Create dataset from synthetic receipts
 python create_collage_dataset.py --collage_dir synthetic_receipts --output_dir receipt_dataset
 
-# 3. Train the model (using SwinV2-Tiny by default)
+# 4. Train the SwinV2-Large model with offline weights
 python train_swinv2_classification.py -tc receipt_dataset/train.csv -td receipt_dataset/train \
                               -vc receipt_dataset/val.csv -vd receipt_dataset/val \
-                              -s 42 -d
+                              -e 20 -b 8 -o /path/to/output/models -s 42 -d \
+                              --model_type swinv2-large --offline \
+                              --pretrained_model_dir /path/to/models/swinv2-large
 
-# 4. Evaluate SwinV2-Large model with offline loading (recommended)
-python evaluate_swinv2_classifier.py --model models/receipt_counter_swinv2-large_best.pth \
+# 5. Evaluate the trained model
+python evaluate_swinv2_classifier.py --model /path/to/output/models/receipt_counter_swinv2-large_best.pth \
                                    --test_csv receipt_dataset/test.csv \
                                    --test_dir receipt_dataset/test \
-                                   --model_type swinv2-large \
-                                   --offline \
-                                   --pretrained_model_dir /Users/tod/PretrainedLLM/swin_large
+                                   --model_type swinv2-large
 
-# 6. Test a single image with offline loading
+# 6. Test a single image with the trained model
 python individual_image_tester.py --image synthetic_receipts/synthetic_001_2_receipts.jpg \
-                                 --model models/receipt_counter_swinv2-large_best.pth \
-                                 --model_type swinv2-large \
-                                 --offline \
-                                 --pretrained_model_dir /Users/tod/PretrainedLLM/swin_large
+                                 --model /path/to/output/models/receipt_counter_swinv2-large_best.pth \
+                                 --model_type swinv2-large
 ```
 
 
@@ -114,47 +114,43 @@ python train_swinv2_classification.py --dry-run -s 42
 #### Evaluation Options
 
 ```bash
-# Evaluate SwinV2-Large model with offline loading (recommended)
+# Standard evaluation of a trained model
 python evaluate_swinv2_classifier.py \
-  --model models/receipt_counter_swinv2-large_best.pth \
+  --model /path/to/output/models/receipt_counter_swinv2-large_best.pth \
   --test_csv receipt_dataset/test.csv \
   --test_dir receipt_dataset/test \
-  --model_type swinv2-large \
-  --offline \
-  --pretrained_model_dir /Users/tod/PretrainedLLM/swin_large
+  --model_type swinv2-large
 
 # Evaluate with optional parameters
 python evaluate_swinv2_classifier.py \
-  --model models/receipt_counter_swinv2-large_best.pth \
+  --model /path/to/output/models/receipt_counter_swinv2-large_best.pth \
   --test_csv receipt_dataset/test.csv \
   --test_dir receipt_dataset/test \
   --output_dir evaluation/results \
+  --model_type swinv2-large \
   [--no-calibration] # without calibration
 
 # Evaluate in binary mode (0 vs 1+ receipts)
 python evaluate_swinv2_classifier.py \
-  --model models/receipt_counter_swinv2-large_best.pth \
+  --model /path/to/output/models/receipt_counter_swinv2-large_best.pth \
   --test_csv receipt_dataset/test.csv \
   --test_dir receipt_dataset/test \
+  --model_type swinv2-large \
   --binary
 ```
 
 #### Testing Individual Images
 
 ```bash
-# Test with SwinV2-Large model using offline loading (recommended)
+# Test a synthetic receipt with 2 receipts
 python individual_image_tester.py --image synthetic_receipts/synthetic_001_2_receipts.jpg \
-                               --model models/receipt_counter_swinv2-large_best.pth \
-                               --model_type swinv2-large \
-                               --offline \
-                               --pretrained_model_dir /Users/tod/PretrainedLLM/swin_large
+                               --model /path/to/output/models/receipt_counter_swinv2-large_best.pth \
+                               --model_type swinv2-large
 
-# Test with SwinV2-Large model on a synthetic receipt with 0 receipts (tax document)
+# Test a synthetic receipt with 0 receipts (tax document)
 python individual_image_tester.py --image synthetic_receipts/synthetic_042_0_receipts.jpg \
-                               --model models/receipt_counter_swinv2-large_best.pth \
-                               --model_type swinv2-large \
-                               --offline \
-                               --pretrained_model_dir /Users/tod/PretrainedLLM/swin_large
+                               --model /path/to/output/models/receipt_counter_swinv2-large_best.pth \
+                               --model_type swinv2-large
 ```
 
 ## Theory
