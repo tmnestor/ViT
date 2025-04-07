@@ -170,16 +170,24 @@ def train_model(
     print(f"Using class distribution: {config.class_distribution}")
     print(f"Using calibration factors: {config.calibration_factors}")
     
-    # Get the normalized and scaled weights tensor for loss function
-    normalized_weights = config.get_class_weights_tensor(device)
-    print(f"Using class weights: {normalized_weights}")
-    
     # Get optimizer parameters from config
     label_smoothing = config.get_model_param("label_smoothing", 0.1)
     weight_decay = config.get_model_param("weight_decay", 0.01)
     lr_scheduler_factor = config.get_model_param("lr_scheduler_factor", 0.5)
     lr_scheduler_patience = config.get_model_param("lr_scheduler_patience", 2)
     min_lr = config.get_model_param("min_lr", 1e-6)
+    
+    # For 3-class classification, use manually defined class weights
+    # These weights reflect the original distribution but condensed to 3 classes
+    class_weights = torch.tensor([
+        config.class_distribution[0],                                        # weight for class 0
+        config.class_distribution[1],                                        # weight for class 1
+        sum(config.class_distribution[2:])                                   # weight for class 2+
+    ], device=device)
+    
+    # Normalize weights
+    normalized_weights = class_weights / class_weights.sum()
+    print(f"Using class weights: {normalized_weights}")
     
     # Use label smoothing along with class weights to improve generalization
     criterion = nn.CrossEntropyLoss(
