@@ -214,7 +214,7 @@ The confusion matrix below shows the model's exceptional classification performa
 
 4. **Bayesian Calibration**: The principled calibration approach improves the reliability of model predictions, especially for minority classes.
 
-## 4. Academic References
+## 4. References
 
 1. **SwinV2 Transformer**:
    Liu, Z., Lin, Y., Cao, Y., Hu, H., Wei, Y., Zhang, Z., Lin, S., & Guo, B. (2022). Swin Transformer V2: Scaling Up Capacity and Resolution. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR).
