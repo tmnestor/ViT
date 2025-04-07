@@ -39,8 +39,8 @@ pip install -r requirements.txt
 # 1. Download model weights for offline use
 python huggingface_model_download.py --model_name "microsoft/swinv2-large-patch4-window12-192-22k" --output_dir /path/to/models/swinv2-large
 
-# 2. Generate synthetic receipts
-python create_synthetic_receipts.py --num_collages 1000 --count_probs "0.3,0.3,0.2,0.1,0.1" --output_dir synthetic_receipts
+# 2. Generate synthetic receipts with stapled payment receipts
+python create_synthetic_receipts.py --num_collages 1000 --count_probs "0.3,0.3,0.2,0.1,0.1" --output_dir synthetic_receipts --stapled_ratio 0.3
 
 # 3. Create dataset from synthetic receipts
 python create_collage_dataset.py --collage_dir synthetic_receipts --output_dir receipt_dataset
@@ -259,7 +259,10 @@ Parameters are determined in the following order:
 
 - **Data Generation**
   - `create_receipt_collages.py` - Generate synthetic receipt collages with portrait/landscape orientations
-  - `create_synthetic_receipts.py` - Generate fully synthetic receipts (100 individual samples)
+  - `create_synthetic_receipts.py` - Generate fully synthetic receipts (100 individual samples) with stapled payment receipts
+    - New `--stapled_ratio` parameter controls proportion of receipts with payment receipts stapled on front
+    - Leverages existing `generate_payment_receipt()` function to create smaller payment slips
+    - Stapled payment receipts create more realistic training data matching real-world tax documents
   - `create_tax_documents.py` - Generate anonymized Australian tax documents for 0-receipt examples
   - `create_collage_dataset.py` - Create datasets from collages
   - `create_rectangle_dataset.py` - Generate simplified rectangle-based dataset
@@ -290,10 +293,36 @@ Parameters are determined in the following order:
 
 This project is licensed under the MIT License - see the LICENSE file for details.
 
+# Planned Modifications
+
+## Stapled Receipt Modification Plan
+
+The `create_synthetic_receipts.py` script will be modified to incorporate payment receipts stapled on top of regular receipts:
+
+1. Update the `create_receipt_collage()` function to accept a new `stapled_ratio` parameter
+   - This parameter controls the proportion of receipts that will have payment receipts stapled on top
+
+2. Modify the receipt generation process to:
+   - For each receipt in a collage, check against the `stapled_ratio` probability
+   - If selected for stapling, create a payment receipt using the existing `generate_payment_receipt()` function
+   - Position the payment receipt partially overlapping the main receipt
+   - Apply a slight rotation to the payment receipt for realism
+   - Add staple marks at the overlap points
+
+3. Add a new CLI parameter to `main()`:
+   ```python
+   parser.add_argument("--stapled_ratio", type=float, default=0.0,
+                     help="Proportion of receipts with payment receipts stapled on top (0.0-1.0)")
+   ```
+
+4. Pass the `stapled_ratio` parameter from command line to the `create_receipt_collage()` function
+
+5. Update documentation with usage examples for the new parameter
+
+The implementation will maintain the correct receipt count for model training purposes, while creating more realistic training data that mimics real-world tax documents where payment receipts are often stapled to the main receipt.
 
 
-
-python huggingface_model_download.py --model_name "microsoft/swinv2-large-patch4-window12-192-22k" --output_dir /Users/tod/PretrainedLLM/swin_large
+<!-- python huggingface_model_download.py --model_name "microsoft/swinv2-large-patch4-window12-192-22k" --output_dir /Users/tod/PretrainedLLM/swin_large
 
 python train_swinv2_classification.py --model_type swinv2 --offline \
                                     --pretrained_model_dir /Users/tod/PretrainedLLM/swin_large
@@ -301,4 +330,4 @@ python train_swinv2_classification.py --model_type swinv2 --offline \
 
 
                                     python train_swinv2_classification.py --model_type swinv2 --offline \
-                                    --pretrained_model_dir ../swin_large
+                                    --pretrained_model_dir ../swin_large -->

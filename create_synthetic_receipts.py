@@ -8,6 +8,184 @@ from PIL import Image, ImageDraw, ImageFont
 from tqdm import tqdm
 from datetime import datetime, timedelta
 
+def generate_payment_receipt(width=300, height=400):
+    """
+    Generate a smaller payment receipt that might be stapled on top of a main receipt.
+    These are typically smaller and simpler, like credit card payment slips or proof of payment.
+    
+    Args:
+        width: Width of the payment receipt (default smaller than full receipts)
+        height: Height of the payment receipt (default smaller than full receipts)
+        
+    Returns:
+        payment_receipt_img: PIL Image of the payment receipt
+    """
+    # Create a payment receipt image
+    padding = 10
+    receipt_img = Image.new('RGB', (width+padding*2, height+padding*2), color=(255, 255, 255))
+    draw = ImageDraw.Draw(receipt_img)
+    
+    # Draw receipt outline with slight border
+    receipt_color = (250, 250, 250)  # Slightly off-white for the receipt paper
+    draw.rectangle([(padding, padding), (width+padding, height+padding)], fill=receipt_color, outline=(240, 240, 240))
+    
+    # Try to load a font
+    try:
+        # Try different common font paths
+        font_paths = [
+            '/Library/Fonts/Arial.ttf',  # macOS
+            '/System/Library/Fonts/Supplemental/Arial.ttf',  # macOS alternative
+            '/usr/share/fonts/truetype/msttcorefonts/Arial.ttf',  # Linux
+            'C:\\Windows\\Fonts\\arial.ttf',  # Windows
+            '/usr/share/fonts/truetype/freefont/FreeMono.ttf',  # Linux alternative
+        ]
+        
+        header_font = None
+        regular_font = None
+        small_font = None
+        
+        for font_path in font_paths:
+            if os.path.exists(font_path):
+                try:
+                    header_font = ImageFont.truetype(font_path, 18)  # Smaller header
+                    regular_font = ImageFont.truetype(font_path, 14)  # Smaller regular
+                    small_font = ImageFont.truetype(font_path, 12)    # Smaller small
+                    break
+                except IOError:
+                    continue
+        
+        # Fall back to default if no font found
+        if header_font is None:
+            header_font = ImageFont.load_default()
+            regular_font = ImageFont.load_default()
+            small_font = ImageFont.load_default()
+            
+    except Exception:
+        # Fallback to default font
+        header_font = ImageFont.load_default()
+        regular_font = ImageFont.load_default()
+        small_font = ImageFont.load_default()
+    
+    # Payment methods and card types
+    payment_methods = ["CREDIT", "DEBIT", "VISA", "MASTERCARD", "AMEX", "EFTPOS"]
+    payment_method = random.choice(payment_methods)
+    
+    # Generate random transaction data
+    amount = round(random.uniform(5.99, 199.99), 2)
+    
+    # Random date in the last year
+    days_ago = random.randint(0, 365)
+    receipt_date = datetime.now() - timedelta(days=days_ago)
+    date_str = receipt_date.strftime("%m/%d/%Y")
+    time_str = f"{random.randint(8, 23)}:{random.randint(0, 59):02d}"
+    
+    # Generate a random transaction number
+    transaction_num = f"#{random.randint(10000, 999999)}"
+    
+    # Calculate positions
+    y_pos = 20 + padding
+    x_center = (width + padding * 2) // 2
+    
+    # Draw payment header
+    draw.text((x_center, y_pos), "PAYMENT RECEIPT", fill=(0, 0, 0), font=header_font, anchor="mt")
+    y_pos += 25
+    
+    # Draw divider
+    left_margin = 20 + padding
+    right_margin = width + padding - 20
+    draw.line([(left_margin, y_pos), (right_margin, y_pos)], fill=(0, 0, 0), width=1)
+    y_pos += 15
+    
+    # Transaction info
+    draw.text((left_margin + 10, y_pos), "DATE:", fill=(0, 0, 0), font=regular_font)
+    draw.text((right_margin - 20, y_pos), date_str, fill=(0, 0, 0), font=regular_font, anchor="rt")
+    y_pos += 20
+    
+    draw.text((left_margin + 10, y_pos), "TIME:", fill=(0, 0, 0), font=regular_font)
+    draw.text((right_margin - 20, y_pos), time_str, fill=(0, 0, 0), font=regular_font, anchor="rt")
+    y_pos += 20
+    
+    draw.text((left_margin + 10, y_pos), "TRANS ID:", fill=(0, 0, 0), font=regular_font)
+    draw.text((right_margin - 20, y_pos), transaction_num, fill=(0, 0, 0), font=regular_font, anchor="rt")
+    y_pos += 20
+    
+    # Payment method
+    draw.text((left_margin + 10, y_pos), "METHOD:", fill=(0, 0, 0), font=regular_font)
+    draw.text((right_margin - 20, y_pos), payment_method, fill=(0, 0, 0), font=regular_font, anchor="rt")
+    y_pos += 30
+    
+    # Divider
+    draw.line([(left_margin, y_pos), (right_margin, y_pos)], fill=(0, 0, 0), width=1)
+    y_pos += 15
+    
+    # Amount
+    draw.text((left_margin + 10, y_pos), "AMOUNT:", fill=(0, 0, 0), font=header_font)
+    draw.text((right_margin - 20, y_pos), f"${amount:.2f}", fill=(0, 0, 0), font=header_font, anchor="rt")
+    y_pos += 30
+    
+    # Add credit card info if applicable
+    if payment_method in ["CREDIT", "VISA", "MASTERCARD", "AMEX"]:
+        card_last_four = f"XXXX-XXXX-XXXX-{random.randint(1000, 9999)}"
+        draw.text((left_margin + 10, y_pos), "CARD:", fill=(0, 0, 0), font=small_font)
+        draw.text((right_margin - 20, y_pos), card_last_four, fill=(0, 0, 0), font=small_font, anchor="rt")
+        y_pos += 20
+        
+        auth_code = ''.join(random.choices('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', k=6))
+        draw.text((left_margin + 10, y_pos), "AUTH:", fill=(0, 0, 0), font=small_font)
+        draw.text((right_margin - 20, y_pos), auth_code, fill=(0, 0, 0), font=small_font, anchor="rt")
+        y_pos += 30
+    
+    # Status
+    draw.text((x_center, y_pos), "APPROVED", fill=(0, 0, 0), font=regular_font, anchor="mt")
+    y_pos += 25
+    
+    # Thank you message
+    draw.text((x_center, y_pos), "THANK YOU", fill=(0, 0, 0), font=small_font, anchor="mt")
+    
+    # Add some realism effects
+    
+    # Add slight noise
+    if random.random() < 0.7:
+        noise_level = random.randint(1, 5)
+        receipt_array = np.array(receipt_img)
+        
+        noise_mask = np.random.rand(*receipt_array.shape[:2]) < (noise_level / 100)
+        for c in range(3):
+            channel = receipt_array[:,:,c]
+            noise = np.random.randint(0, 10, size=channel.shape)
+            channel[noise_mask] = np.clip(channel[noise_mask] - noise[noise_mask], 0, 255)
+        
+        receipt_img = Image.fromarray(receipt_array)
+    
+    # Apply slight rotation
+    if random.random() < 0.5:
+        angle = random.uniform(-2, 2)
+        receipt_img = receipt_img.rotate(angle, expand=True, resample=Image.BICUBIC, fillcolor=(255, 255, 255))
+    
+    # Add staple marks (small dots in corners)
+    if random.random() < 0.8:  # 80% chance to add staple marks
+        staple_color = (120, 120, 120)  # Gray color for staple
+        staple_positions = []
+        
+        # Choose 1-2 corners for staples
+        num_staples = random.randint(1, 2)
+        corners = [(padding + 5, padding + 5),  # Top-left
+                  (width + padding - 5, padding + 5),  # Top-right
+                  (padding + 5, height + padding - 5),  # Bottom-left
+                  (width + padding - 5, height + padding - 5)]  # Bottom-right
+        
+        staple_positions = random.sample(corners, num_staples)
+        
+        for pos in staple_positions:
+            # Draw a small circle or dot to represent the staple
+            x, y = pos
+            draw = ImageDraw.Draw(receipt_img)
+            staple_size = 3
+            draw.ellipse([(x-staple_size, y-staple_size), (x+staple_size, y+staple_size)], 
+                         fill=staple_color)
+    
+    return receipt_img
+
 def generate_synthetic_receipt(width=500, height=800):
     """
     Generate a synthetic receipt from scratch with realistic text content and edges.
@@ -299,7 +477,7 @@ def generate_synthetic_receipt(width=500, height=800):
     
     return receipt_img
 
-def create_receipt_collage(canvas_size=(1600, 1200), receipt_count=None):
+def create_receipt_collage(canvas_size=(1600, 1200), receipt_count=None, stapled_ratio=0.0):
     """
     Create a collage of synthetic receipts arranged centrally with minimal spacing.
     For 0-receipt examples, generates an Australian tax document in portrait orientation.
@@ -307,6 +485,7 @@ def create_receipt_collage(canvas_size=(1600, 1200), receipt_count=None):
     Args:
         canvas_size: Size of the output canvas (width, height)
         receipt_count: Number of receipts to include
+        stapled_ratio: Proportion of receipts with payment receipts stapled on top (0.0-1.0)
         
     Returns:
         collage_img: PIL Image of the collage or tax document for 0-receipt cases
@@ -316,6 +495,10 @@ def create_receipt_collage(canvas_size=(1600, 1200), receipt_count=None):
         When receipt_count is 0, this function returns an Australian tax document (ATO notice,
         PAYG summary, etc.) in portrait orientation to represent real-world tax documents
         that might be included in tax submissions but aren't receipts.
+        
+        When stapled_ratio > 0, some receipts will have smaller payment receipts stapled
+        on top, as commonly seen in tax documentation. This creates more realistic
+        training data that mimics real-world receipts in tax submissions.
     """
     # Always create a plain white canvas
     canvas = Image.new('RGB', canvas_size, color=(255, 255, 255))
@@ -514,6 +697,61 @@ def create_receipt_collage(canvas_size=(1600, 1200), receipt_count=None):
             canvas.paste(receipt, (paste_x, paste_y))
             actual_count += 1
             
+            # Add stapled payment receipt on top of this receipt based on probability
+            if random.random() < stapled_ratio:
+                try:
+                    # Create a smaller payment receipt
+                    payment_width = int(receipt.width * 0.6)  # Payment receipt is ~60% of main receipt width
+                    payment_height = int(receipt.height * 0.5)  # Payment receipt is ~50% of main receipt height
+                    payment_receipt = generate_payment_receipt(
+                        width=int(payment_width * 0.8),  # Account for padding
+                        height=int(payment_height * 0.8)  # Account for padding
+                    )
+                    
+                    # Apply slight rotation for realism
+                    angle = random.uniform(-5, 5)
+                    payment_receipt = payment_receipt.rotate(angle, expand=True, resample=Image.BICUBIC, fillcolor=(255, 255, 255))
+                    
+                    # Position the payment receipt to partially overlap the main receipt
+                    # (typically in the top portion)
+                    overlap_x = random.randint(paste_x, paste_x + receipt.width - payment_receipt.width)
+                    overlap_y = random.randint(paste_y, paste_y + int(receipt.height * 0.4))  # Top 40% of receipt
+                    
+                    # Ensure payment receipt stays within canvas bounds
+                    overlap_x = max(0, min(overlap_x, canvas_size[0] - payment_receipt.width))
+                    overlap_y = max(0, min(overlap_y, canvas_size[1] - payment_receipt.height))
+                    
+                    # Add staple marks at the overlap point
+                    staple_color = (120, 120, 120)  # Gray color for staple
+                    staple_img = payment_receipt.copy()
+                    staple_draw = ImageDraw.Draw(staple_img)
+                    
+                    # Add 1-2 staple marks at corners or edges
+                    num_staples = random.randint(1, 2)
+                    for _ in range(num_staples):
+                        # Choose staple position along edges
+                        staple_x = random.randint(10, payment_receipt.width - 10)
+                        staple_y = random.randint(10, payment_receipt.height - 10)
+                        
+                        # 70% chance staple is at the top or bottom edge
+                        if random.random() < 0.7:
+                            if random.random() < 0.5:
+                                staple_y = random.randint(5, 15)  # Top edge
+                            else:
+                                staple_y = random.randint(payment_receipt.height - 15, payment_receipt.height - 5)  # Bottom edge
+                        
+                        # Draw a small circle to represent the staple
+                        staple_size = 3
+                        staple_draw.ellipse([(staple_x-staple_size, staple_y-staple_size), 
+                                            (staple_x+staple_size, staple_y+staple_size)], 
+                                           fill=staple_color)
+                    
+                    # Paste the payment receipt on top
+                    canvas.paste(staple_img, (overlap_x, overlap_y))
+                    
+                except Exception as e:
+                    print(f"Error adding stapled payment receipt: {e}")
+            
         except Exception as e:
             print(f"Error creating receipt {i}: {e}")
             continue
@@ -533,6 +771,7 @@ def main():
     - Grid-based placement with minimal jitter
     - Minimal rotation for slight variation
     - No overlaps between receipts
+    - Option to add stapled payment receipts on top of main receipts (--stapled_ratio)
     - 0-receipt examples use Australian tax documents in portrait orientation
     - Random portrait or landscape orientations to mimic real phone photos
     
@@ -551,6 +790,8 @@ def main():
                       help="Height of the collage canvas (will be swapped for portrait orientation)")
     parser.add_argument("--count_probs", type=str, default="0.2,0.2,0.2,0.2,0.1,0.1",
                       help="Comma-separated probabilities for 0,1,2,3,4,5 receipts")
+    parser.add_argument("--stapled_ratio", type=float, default=0.0,
+                      help="Proportion of receipts with payment receipts stapled on top (0.0-1.0)")
     
     args = parser.parse_args()
     
@@ -584,6 +825,10 @@ def main():
     # Always use white background
     print("Using white background for all collages (255, 255, 255)")
     
+    # Print stapled receipt info
+    if args.stapled_ratio > 0:
+        print(f"Adding stapled payment receipts to {args.stapled_ratio * 100:.1f}% of receipts")
+    
     # Only create collages if num_collages > 0
     if args.num_collages > 0:
         # Create collages
@@ -603,7 +848,8 @@ def main():
             # Create collage with synthetic receipts
             collage, actual_count = create_receipt_collage(
                 canvas_size=canvas_size, 
-                receipt_count=receipt_count
+                receipt_count=receipt_count,
+                stapled_ratio=args.stapled_ratio
             )
             
             # Track distribution
