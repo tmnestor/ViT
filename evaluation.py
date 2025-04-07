@@ -159,9 +159,56 @@ def evaluate_model(
         # Convert logits to probabilities
         probs = torch.nn.functional.softmax(all_logits, dim=1)
         
+        # Get number of classes in the model output
+        num_output_classes = probs.shape[1]
+        
         # Apply calibration
         class_prior = config.get_class_prior_tensor(device)
         calibration_factors = config.get_calibration_tensor(device)
+        
+        # Check if we need to adapt the calibration factors to match model output classes
+        if num_output_classes != len(calibration_factors):
+            print(f"Model outputs {num_output_classes} classes but calibration has {len(calibration_factors)} factors")
+            print("Adapting calibration factors to match model output dimensionality...")
+            
+            if num_output_classes == 3 and len(calibration_factors) == 5:
+                # Handle special case of 3-class model (0,1,2+) with 5-class calibration
+                # Class 0 and 1 stay the same, classes 2-4 are combined into class 2+
+                adapted_prior = torch.zeros(num_output_classes, device=device)
+                adapted_calibration = torch.zeros(num_output_classes, device=device)
+                
+                # Keep classes 0 and 1 the same
+                adapted_prior[0] = class_prior[0]
+                adapted_prior[1] = class_prior[1]
+                adapted_calibration[0] = calibration_factors[0]
+                adapted_calibration[1] = calibration_factors[1]
+                
+                # Combine classes 2, 3, and 4 into a single "2+" class with weighted average
+                total_weight = class_prior[2] + class_prior[3] + class_prior[4]
+                if total_weight > 0:
+                    # Weighted average for calibration factors
+                    adapted_calibration[2] = (
+                        (calibration_factors[2] * class_prior[2] + 
+                         calibration_factors[3] * class_prior[3] + 
+                         calibration_factors[4] * class_prior[4]) / total_weight
+                    )
+                    # Sum for the prior
+                    adapted_prior[2] = total_weight
+                else:
+                    # Fallback if weights are zero
+                    adapted_calibration[2] = calibration_factors[2]  # Use the first of the higher classes
+                    adapted_prior[2] = 0.0
+                
+                # Use the adapted tensors
+                class_prior = adapted_prior
+                calibration_factors = adapted_calibration
+                
+                print(f"Adapted class priors: {class_prior}")
+                print(f"Adapted calibration factors: {calibration_factors}")
+            else:
+                # For other mismatches, disable calibration
+                print("Warning: Model class count doesn't match calibration factors. Disabling calibration.")
+                return metrics
         
         # Apply calibration to each sample
         calibrated_probs = probs * calibration_factors.unsqueeze(0) * class_prior.unsqueeze(0)
