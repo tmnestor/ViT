@@ -37,18 +37,11 @@ pip install -r requirements.txt
 
 ```bash
 
-# 1. Generate 100 individual receipt samples (in synthetic_receipts/samples)
-python create_synthetic_receipts.py --output_dir synthetic_receipts --num_collages 0
-
-# 2. Generate synthetic training data (with tax documents for 0-receipt examples)
-#    This creates collages in both portrait and landscape orientations
-python create_receipt_collages.py --num_collages 1000 --count_probs "0.3,0.3,0.2, 0.1, 0.1"
-
-# 3. Generate additional synthetic receipts with full control
+# 1. Generate additional synthetic receipts with full control
 python create_synthetic_receipts.py --num_collages 1000 --count_probs "0.3,0.3,0.2, 0.1, 0.1" --output_dir synthetic_receipts
 
 # 4. Create dataset from collages
-python create_collage_dataset.py --collage_dir receipt_collages --output_dir receipt_dataset
+python create_collage_dataset.py --collage_dir synthetic_receipts --output_dir receipt_dataset
 
 # 3. Train the model (using SwinV2-Tiny by default)
 python train_swinv2_classification.py -tc receipt_dataset/train.csv -td receipt_dataset/train \
@@ -71,33 +64,7 @@ python individual_image_tester.py --image receipt_collages/collage_254_3_receipt
                                  --model models/receipt_counter_swinv2_best.pth
 ```
 
-### Advanced Usage
 
-#### Synthetic Data Generation Options
-
-```bash
-# Generate ONLY 100 individual receipt samples (no collages)
-python create_synthetic_receipts.py --output_dir synthetic_receipts --num_collages 0
-
-# Generate synthetic training data with specific class distribution
-# This will use Australian tax documents for 0-receipt examples
-python create_receipt_collages.py --num_collages 300 --count_probs "0.4,0.3,0.3"
-
-# Generate synthetic tax documents only
-python create_tax_documents.py --num_samples 100 --output_dir synthetic_receipts/tax_docs
-
-# Replace existing zero receipt examples with tax documents
-python create_tax_documents.py --num_samples 100 --replace
-
-# Generate fully synthetic dataset with balanced class distribution
-python create_synthetic_receipts.py --num_collages 300 --count_probs "0.2,0.2,0.2,0.2,0.1,0.1"
-
-# Generate dataset with different canvas dimensions
-python create_receipt_collages.py --num_collages 300 --canvas_width 1200 --canvas_height 1600
-
-# Create training/validation/test datasets from generated collages
-python create_collage_dataset.py --collage_dir receipt_collages --output_dir receipt_dataset --split 0.7,0.15,0.15
-```
 
 #### Model Options
 
@@ -328,4 +295,9 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 python huggingface_model_download.py --model_name "microsoft/swinv2-large-patch4-window12-192-22k" --output_dir /Users/tod/PretrainedLLM/swin_large
 
 python train_swinv2_classification.py --model_type swinv2 --offline \
-                                    --pretrained_model_dir Users/tod/PretrainedLLM/swin_large
+                                    --pretrained_model_dir /Users/tod/PretrainedLLM/swin_large
+
+
+
+                                    python train_swinv2_classification.py --model_type swinv2 --offline \
+                                    --pretrained_model_dir ../swin_large

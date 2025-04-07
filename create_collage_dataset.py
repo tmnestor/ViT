@@ -2,14 +2,17 @@ import argparse
 import os
 import re
 import shutil
+from pathlib import Path
 
 import pandas as pd
 from sklearn.model_selection import train_test_split
 
 
 def extract_receipt_count(filename):
-    """Extract the receipt count from the collage filename."""
-    match = re.search(r"_(\d+)_receipts", filename)
+    """Extract the receipt count from the collage filename.
+    Supports both original collage_XXX_N_receipts.jpg and new synthetic_XXX_N_receipts.jpg formats.
+    """
+    match = re.search(r"(?:collage|synthetic)_\d+_(\d+)_receipts", filename)
     if match:
         return int(match.group(1))
     return 0
@@ -40,14 +43,30 @@ def prepare_dataset(
     os.makedirs(val_dir, exist_ok=True)
     os.makedirs(test_dir, exist_ok=True)
 
+    # Check if we're using a Path object
+    collage_dir_path = Path(collage_dir)
+
     # Collect image paths and receipt counts
     data = []
-    for filename in os.listdir(collage_dir):
+    
+    # Find all images and avoid samples directory
+    for file_path in collage_dir_path.glob("**/*.jpg"):
+        # Skip files in the samples subdirectory
+        if "samples" in str(file_path):
+            continue
+            
+        filename = file_path.name
         if not filename.lower().endswith((".jpg", ".jpeg", ".png")):
             continue
 
         receipt_count = extract_receipt_count(filename)
-        data.append((filename, receipt_count))
+        # Store the relative path to preserve the structure
+        rel_path = file_path.relative_to(collage_dir_path)
+        data.append((str(rel_path), receipt_count))
+    
+    if not data:
+        raise ValueError(f"No valid receipt collage images found in {collage_dir}. " +
+                        "Make sure to run create_synthetic_receipts.py first.")
 
     # Create a DataFrame
     df = pd.DataFrame(data, columns=["filename", "receipt_count"])

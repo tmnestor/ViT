@@ -40,7 +40,7 @@ DEFAULT_MODEL_PARAMS = {
     "lr_scheduler_patience": 2,
     "min_lr": 1e-6,
     "gradient_clip_value": 1.0,
-    "early_stopping_patience": 5,
+    "early_stopping_patience": 3,
     # Data parameters
     "train_val_split": 0.8,  # Default train/val split ratio when no separate val set
     "data_augmentation": True,  # Whether to use data augmentation by default

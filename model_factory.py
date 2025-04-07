@@ -64,7 +64,9 @@ class ModelFactory:
         
         # Get number of classes from config if not provided
         if num_classes is None:
-            num_classes = len(config.class_distribution)
+            # Always use 3 classes for receipt counting (0, 1, 2+)
+            # regardless of the distribution used for generation
+            num_classes = 3
         
         # Temporarily disable HuggingFace warnings if not verbose
         if not verbose:

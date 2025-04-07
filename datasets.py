@@ -52,20 +52,16 @@ class ReceiptDataset(Dataset):
     def __getitem__(self, idx):
         filename = self.data.iloc[idx, 0]
         
-        # Try multiple potential locations for the image
-        potential_paths = [
-            os.path.join(self.img_dir, filename),                # Primary location
-            os.path.join(self.root_dir, 'train', filename),      # Alternative in train dir
-            os.path.join(self.root_dir, 'val', filename),        # Alternative in val dir
-            os.path.join(self.root_dir, filename)                # Alternative in root dir
-        ]
+        # Only use the primary img_dir - no fallbacks to prevent data leakage
+        image_path = os.path.join(self.img_dir, filename)
         
-        # Try each potential path
-        image = None
-        for path in potential_paths:
-            if os.path.exists(path):
-                image = Image.open(path).convert("RGB")
-                break
+        # Check if the image exists in the specified directory
+        if os.path.exists(image_path):
+            image = Image.open(image_path).convert("RGB")
+        else:
+            # Log the error but don't fallback to other directories
+            print(f"Error: Image {filename} not found at {image_path}")
+            image = None
         
         if image is None:
             # Fallback to using a blank image rather than crashing

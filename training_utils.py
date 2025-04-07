@@ -324,7 +324,7 @@ def plot_confusion_matrix(predictions, ground_truth, output_path=None, figsize=(
     
     # Class accuracies
     class_accuracies = []
-    for i in range(len(class_labels)):
+    for i in range(cm.shape[0]): # Use cm.shape[0] to ensure we only iterate over available classes
         total_class = np.sum(cm[i, :])
         if total_class > 0:
             class_accuracies.append(cm[i, i] / total_class)
