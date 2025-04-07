@@ -4,20 +4,11 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 import torch
+from PIL import Image
 from receipt_processor import ReceiptProcessor
 from model_factory import ModelFactory
 from config import get_config
 from device_utils import get_device
-
-# Try to import OpenCV, but provide helpful error if not installed
-try:
-    import cv2
-except ImportError:
-    print("OpenCV (cv2) is not installed. Please install it with:")
-    print("pip install opencv-python")
-    print("\nAlternatively, you can run without image enhancement:")
-    print("pip install opencv-python-headless")
-    sys.exit(1)
 
 def process_image(model_path, image_path, enhance=None, config_path=None, model_type=None):
     """Process an image using the trained model."""
@@ -127,8 +118,8 @@ def process_image(model_path, image_path, enhance=None, config_path=None, model_
     
     # Visualize results
     try:
-        img = cv2.imread(image_path)
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        # Open image with PIL (already in RGB format)
+        img = np.array(Image.open(image_path))
         
         plt.figure(figsize=(10, 8))
         plt.imshow(img)

@@ -1,7 +1,7 @@
-# import cv2
-import albumentations as A
 import numpy as np
-from albumentations.pytorch import ToTensorV2
+import torch
+from PIL import Image, ImageOps, ImageFilter
+from torchvision import transforms
 
 from config import get_config
 
@@ -20,84 +20,73 @@ class ReceiptProcessor:
 
         if augment:
             # Enhanced transform with augmentations for training
-            self.transform = A.Compose(
-                [
-                    A.Resize(height=self.img_size, width=self.img_size),
-                    A.OneOf(
-                        [
-                            A.RandomBrightnessContrast(
-                                brightness_limit=0.2, contrast_limit=0.2, p=0.8
-                            ),
-                            A.RandomGamma(gamma_limit=(80, 120), p=0.5),
-                        ],
-                        p=0.8,
-                    ),
-                    A.OneOf(
-                        [
-                            A.GaussianBlur(blur_limit=(3, 5), p=0.6),
-                            A.GaussNoise(p=0.4),  # Simplified GaussNoise
-                        ],
-                        p=0.5,
-                    ),
-                    A.Affine(
-                        scale=(0.8, 1.2),
-                        translate_percent=(0, 0.1),
-                        rotate=(-15, 15),
-                        p=0.7,
-                    ),
-                    A.OneOf(
-                        [
-                            A.GridDistortion(num_steps=5, distort_limit=0.3, p=0.5),
-                            A.OpticalDistortion(distort_limit=0.3, p=0.5),
-                        ],
-                        p=0.4,
-                    ),
-                    A.CoarseDropout(
-                        p=0.5
-                    ),  # Simplified CoarseDropout with default parameters
-                    A.Normalize(mean=mean, std=std),
-                    ToTensorV2(),
-                ]
-            )
+            self.transform = transforms.Compose([
+                transforms.Resize((self.img_size, self.img_size)),
+                # Color transforms - brightness/contrast adjustments
+                transforms.RandomApply([
+                    transforms.ColorJitter(brightness=0.2, contrast=0.2)
+                ], p=0.8),
+                # Blur or noise - simulate document scanning artifacts
+                transforms.RandomApply([
+                    transforms.GaussianBlur(kernel_size=5, sigma=(0.1, 2.0))
+                ], p=0.5),
+                # Geometric transforms - simulate different scanning angles
+                transforms.RandomAffine(
+                    degrees=15,                # Rotation range 
+                    translate=(0.1, 0.1),      # Translation range
+                    scale=(0.8, 1.2),          # Scale range
+                ),
+                # Convert to tensor first (before RandomErasing which expects tensor)
+                transforms.ToTensor(),
+                # Simulates occlusions or missing parts
+                transforms.RandomErasing(p=0.5, scale=(0.02, 0.33)),
+                # Normalize
+                transforms.Normalize(mean=mean, std=std)
+            ])
         else:
             # Standard transform for evaluation
-            self.transform = A.Compose(
-                [
-                    A.Resize(height=self.img_size, width=self.img_size),
-                    A.Normalize(mean=mean, std=std),
-                    ToTensorV2(),
-                ]
-            )
+            self.transform = transforms.Compose([
+                transforms.Resize((self.img_size, self.img_size)),
+                transforms.ToTensor(),
+                transforms.Normalize(mean=mean, std=std)
+            ])
 
     def preprocess_image(self, image_path):
         """Process a scanned document image for receipt counting."""
-        # Read image
-        img = cv2.imread(image_path)
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        # Read image using PIL (already in RGB format)
+        img = Image.open(image_path)
 
-        # Apply preprocessing
-        preprocessed = self.transform(image=img)["image"]
+        # Apply preprocessing (torchvision transforms work directly with PIL images)
+        preprocessed = self.transform(img)
 
         # Add batch dimension
         return preprocessed.unsqueeze(0)
 
     def enhance_scan_quality(self, image_path, output_path=None):
         """Enhance scanned image quality for better receipt detection."""
-        img = cv2.imread(image_path)
-
-        # Convert to grayscale
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
-        # Apply adaptive thresholding
-        thresh = cv2.adaptiveThreshold(
-            gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
-        )
-
+        # Open image and convert to grayscale
+        img = Image.open(image_path).convert('L')
+        
+        # Enhance contrast
+        img = ImageOps.autocontrast(img, cutoff=2)
+        
+        # Apply filter for edge enhancement
+        img = img.filter(ImageFilter.EDGE_ENHANCE)
+        
+        # Convert to binary using threshold
+        # Create a point function to threshold the image
+        threshold = 200  # Adjust this value to get proper thresholding
+        img = img.point(lambda p: 255 if p > threshold else 0)
+        
         # Apply morphological operations to reduce noise
-        kernel = np.ones((2, 2), np.uint8)
-        opening = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel)
-
+        # For opening, we first erode then dilate to remove small noise
+        img = img.filter(ImageFilter.MinFilter(3))  # Similar to erosion
+        img = img.filter(ImageFilter.MaxFilter(3))  # Similar to dilation
+        
+        # Convert to numpy array for return consistency
+        result = np.array(img)
+        
         if output_path:
-            cv2.imwrite(output_path, opening)
-
-        return opening
+            img.save(output_path)
+        
+        return result

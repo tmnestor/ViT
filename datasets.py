@@ -77,8 +77,9 @@ class ReceiptDataset(Dataset):
         
         # Apply transformations if available
         if self.transform:
-            transformed = self.transform(image=image_np)
-            image_tensor = transformed["image"]
+            # The transform from receipt_processor.py is a torchvision transform (not albumentations)
+            # that works directly with PIL images, not with numpy arrays + keywords
+            image_tensor = self.transform(image)
         else:
             # Manual resize and normalization if no transform provided
             image = image.resize((self.image_size, self.image_size), Image.BILINEAR)

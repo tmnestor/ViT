@@ -37,6 +37,8 @@ def train_model(
     augment=None,
     resume_checkpoint=None,
     model_type=None,
+    offline=False,
+    pretrained_model_dir=None,
 ):
     """
     Train the SwinV2 Transformer model for receipt counting as a classification task.
@@ -54,6 +56,8 @@ def train_model(
         augment: If True, apply data augmentation during training (default from config)
         resume_checkpoint: Path to checkpoint to resume training from (optional)
         model_type: Type of SwinV2 model to use ("swinv2" or "swinv2-large") (default from config)
+        offline: If True, use locally downloaded model weights without online access
+        pretrained_model_dir: Directory containing pre-downloaded model weights (used with offline=True)
         
     Returns:
         The best model from training, NOT the final model from the last epoch
@@ -124,8 +128,42 @@ def train_model(
         model = ModelFactory.load_model(checkpoint_path, model_type=model_type).to(device)
         print(f"Resumed {model_type} Transformer model from checkpoint")
     else:
-        model = ModelFactory.create_transformer(model_type=model_type, pretrained=True).to(device)
-        print(f"Initialized new {model_type} Transformer model using Hugging Face transformers")
+        if offline:
+            print(f"Using offline mode with pre-downloaded model weights")
+            
+            # Check directory name for hints about model type to avoid mismatches
+            if pretrained_model_dir:
+                # Auto-detect model type from directory name
+                dir_path = Path(pretrained_model_dir)
+                dir_name = dir_path.name.lower()
+                
+                # If directory name contains model type hint that doesn't match requested type
+                if 'large' in dir_name and model_type != 'swinv2-large':
+                    print(f"WARNING: Directory name suggests a SwinV2-Large model, but requested type is {model_type}")
+                    print(f"Auto-switching to swinv2-large model type to match the pre-downloaded weights")
+                    model_type = 'swinv2-large'
+                elif 'tiny' in dir_name and model_type == 'swinv2-large':
+                    print(f"WARNING: Directory name suggests a SwinV2-Tiny model, but requested type is {model_type}")
+                    print(f"Auto-switching to swinv2 (tiny) model type to match the pre-downloaded weights")
+                    model_type = 'swinv2'
+                
+                print(f"Loading from specified directory: {pretrained_model_dir} as model type: {model_type}")
+                model = ModelFactory.create_transformer(
+                    model_type=model_type, 
+                    pretrained=True, 
+                    offline=True,
+                    pretrained_model_dir=pretrained_model_dir
+                ).to(device)
+            else:
+                print(f"Loading from default cache location (offline mode)")
+                model = ModelFactory.create_transformer(
+                    model_type=model_type, 
+                    pretrained=True, 
+                    offline=True
+                ).to(device)
+        else:
+            model = ModelFactory.create_transformer(model_type=model_type, pretrained=True).to(device)
+            print(f"Initialized new {model_type} Transformer model using Hugging Face transformers")
 
     # Loss and optimizer with more robust learning rate control
     # Get class weights from configuration system
@@ -381,6 +419,14 @@ def main():
         help="Type of SwinV2 model to use (default from config)"
     )
     training_group.add_argument(
+        "--offline", action="store_true",
+        help="Use offline mode with locally downloaded model weights"
+    )
+    training_group.add_argument(
+        "--pretrained_model_dir", type=str,
+        help="Directory containing pre-downloaded model weights (used with --offline)"
+    )
+    training_group.add_argument(
         "--epochs", "-e", type=int,
         help="Number of training epochs (default from config)"
     )
@@ -556,6 +602,9 @@ def main():
         print(f"Validation data: {val_csv} ({val_dir})")
         print(f"Binary mode: {args.binary}")
         print(f"Data augmentation: {'disabled' if not augment else 'enabled'}")
+        print(f"Offline mode: {args.offline}")
+        if args.offline and args.pretrained_model_dir:
+            print(f"Pre-downloaded model dir: {args.pretrained_model_dir}")
         print(f"Epochs: {epochs}")
         print(f"Batch size: {batch_size}")
         print(f"Learning rate - Classifier: {lr}, Backbone: {lr * backbone_lr_multiplier}")
@@ -583,6 +632,8 @@ def main():
         augment=(not args.no_augment),  # Pass augmentation flag to train_model
         resume_checkpoint=resume_checkpoint if args.resume else None,
         model_type=args.model_type,
+        offline=args.offline,
+        pretrained_model_dir=args.pretrained_model_dir,
     )
 
 

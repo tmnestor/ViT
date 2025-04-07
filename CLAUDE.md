@@ -132,6 +132,14 @@ The codebase has been refactored to:
 9. Improve CLI interfaces with argument groups and shorthand options
 10. Add support for checkpoint resuming via the `--resume` parameter
 
+## Development Guidelines
+
+1. README.md should be updated whenever CLI parameters are changed or added
+2. Maintain a consistent interface between training and evaluation scripts
+3. Document new features both in code comments and README.md
+4. Never store models in the source code root directory
+5. Use absolute paths to external model/data storage locations in production
+
 ## Environment Variables
 
 You can use these environment variables to override default configurations:
@@ -175,6 +183,21 @@ conda env create -f environment.yml
 conda activate vit_env
 ```
 
+### Running the Data Pipeline
+
+To generate the complete receipt dataset, run the following commands in order:
+
+```bash
+# 1. Generate sample receipts for testing
+python3 create_sample_receipts.py --num_samples 50
+
+# 2. Create receipt collages from sample images
+python3 create_receipt_collages.py --input_dir synthetic_receipts/samples --num_collages 300
+
+# 3. Create organized dataset from collages
+python3 create_collage_dataset.py --collage_dir receipt_collages --output_dir receipt_dataset
+```
+
 Key dependencies:
 - Python 3.11
 - PyTorch 2.6.0
@@ -182,5 +205,6 @@ Key dependencies:
 - transformers 4.49.0
 - pandas 2.2.3
 - scikit-learn 1.6.1
-- albumentations 2.0.5
 - matplotlib 3.10.1
+- Pillow 11.1.0
+- tqdm 4.67.1

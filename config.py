@@ -9,12 +9,9 @@ import os
 
 import torch
 
-# Disable albumentations version check to avoid network connectivity warnings
-os.environ["ALBUMENTATIONS_SKIP_VERSION_CHECK"] = "1"
-
 # Default class distribution - can be overridden by environment or config file
 # Format: [p0, p1, p2+] where p_i is probability of having i receipts (p2+ = 2 or more)
-DEFAULT_CLASS_DISTRIBUTION = [0.4, 0.3, 0.3]
+DEFAULT_CLASS_DISTRIBUTION = [0.3, 0.3, 0.2, 0.1, 0.1]
 
 # Default binary distribution - for "multiple receipts or not" classification
 # Format: [p0, p1+] where p0 is probability of having 0 receipts, p1+ is probability of having 1+ receipts
@@ -43,7 +40,7 @@ DEFAULT_MODEL_PARAMS = {
     "lr_scheduler_patience": 2,
     "min_lr": 1e-6,
     "gradient_clip_value": 1.0,
-    "early_stopping_patience": 3,
+    "early_stopping_patience": 5,
     # Data parameters
     "train_val_split": 0.8,  # Default train/val split ratio when no separate val set
     "data_augmentation": True,  # Whether to use data augmentation by default

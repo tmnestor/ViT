@@ -9,9 +9,11 @@ This project classifies the number of receipts present in an image using the adv
 1. Detect and count receipts in images with high accuracy
 2. Provide confidence scores for each prediction
 3. Handle class imbalance through robust calibration techniques
-4. Achieve high performance without extensive computational requirements
+4. Distinguish between receipts and non-receipt documents (Australian tax documents)
+5. Process images in both portrait and landscape orientations
+6. Achieve high performance without extensive computational requirements
 
-The classifier is particularly useful for document processing applications, digitizing paper receipts, and automated accounting systems.
+The classifier is particularly useful for document processing applications, digitizing paper receipts, and automated accounting systems. The project includes tools for generating synthetic receipts and anonymized Australian tax documents for training.
 
 ## Usage
 
@@ -31,10 +33,17 @@ pip install -r requirements.txt
 ### Quick Start
 
 ```bash
-# 1. Generate synthetic training data
-python create_receipt_collages.py --num_collages 300
+# 1. Generate 100 individual receipt samples (in synthetic_receipts/samples)
+python create_synthetic_receipts.py --output_dir synthetic_receipts --num_collages 0
 
-# 2. Create dataset from collages
+# 2. Generate synthetic training data (with tax documents for 0-receipt examples)
+#    This creates collages in both portrait and landscape orientations
+python create_receipt_collages.py --num_collages 1000 --count_probs "0.3,0.3,0.2, 0.1, 0.1"
+
+# 3. Generate additional synthetic receipts with full control
+python create_synthetic_receipts.py --num_collages 1000 --count_probs "0.3,0.3,0.2, 0.1, 0.1" --output_dir synthetic_receipts
+
+# 4. Create dataset from collages
 python create_collage_dataset.py --collage_dir receipt_collages --output_dir receipt_dataset
 
 # 3. Train the model (using SwinV2-Tiny by default)
@@ -60,6 +69,32 @@ python individual_image_tester.py --image receipt_collages/collage_254_3_receipt
 
 ### Advanced Usage
 
+#### Synthetic Data Generation Options
+
+```bash
+# Generate ONLY 100 individual receipt samples (no collages)
+python create_synthetic_receipts.py --output_dir synthetic_receipts --num_collages 0
+
+# Generate synthetic training data with specific class distribution
+# This will use Australian tax documents for 0-receipt examples
+python create_receipt_collages.py --num_collages 300 --count_probs "0.4,0.3,0.3"
+
+# Generate synthetic tax documents only
+python create_tax_documents.py --num_samples 100 --output_dir synthetic_receipts/tax_docs
+
+# Replace existing zero receipt examples with tax documents
+python create_tax_documents.py --num_samples 100 --replace
+
+# Generate fully synthetic dataset with balanced class distribution
+python create_synthetic_receipts.py --num_collages 300 --count_probs "0.2,0.2,0.2,0.2,0.1,0.1"
+
+# Generate dataset with different canvas dimensions
+python create_receipt_collages.py --num_collages 300 --canvas_width 1200 --canvas_height 1600
+
+# Create training/validation/test datasets from generated collages
+python create_collage_dataset.py --collage_dir receipt_collages --output_dir receipt_dataset --split 0.7,0.15,0.15
+```
+
 #### Model Options
 
 ```bash
@@ -69,9 +104,24 @@ python train_swinv2_classification.py --model_type swinv2
 # Train with SwinV2-Large model (22K pre-trained)
 python train_swinv2_classification.py --model_type swinv2-large
 
-# Download model weights for offline use
-python swinv2_model_download.py --model_type tiny
-python swinv2_model_download.py --model_type large
+# Production Model Management
+# Download models for offline use (never store in source code root)
+python huggingface_model_download.py --model_name "google/vit-base-patch16-224" --output_dir /path/to/models/vit
+python huggingface_model_download.py --model_name "facebook/deit-base-patch16-224" --output_dir /path/to/models/deit
+python huggingface_model_download.py --model_name "microsoft/swinv2-tiny-patch4-window8-256" --output_dir /path/to/models/swinv2-tiny
+python huggingface_model_download.py --model_name "microsoft/swinv2-large-patch4-window12-192-22k" --output_dir /path/to/models/swinv2-large
+
+# Train using pre-downloaded models
+# ViT model example
+python train_vit_classification.py --model_name "google/vit-base-patch16-224" --offline \
+                                  --pretrained_model_dir /path/to/models/vit
+
+# SwinV2 model examples
+python train_swinv2_classification.py --model_type swinv2 --offline \
+                                    --pretrained_model_dir /path/to/models/swinv2-tiny
+
+python train_swinv2_classification.py --model_type swinv2-large --offline \
+                                    --pretrained_model_dir /path/to/models/swinv2-large
 ```
 
 #### Training Options
@@ -113,14 +163,22 @@ python evaluate_swinv2_classifier.py --model models/receipt_counter_swinv2_best.
 #### Testing Individual Images
 
 ```bash
-# Test with SwinV2-Tiny model
+# Test with SwinV2-Tiny model on a collage
 python individual_image_tester.py --image receipt_collages/collage_254_3_receipts.jpg \
+                               --model models/receipt_counter_swinv2_best.pth
+
+# Test with SwinV2-Tiny model on a tax document (0 receipts)
+python individual_image_tester.py --image synthetic_receipts/synthetic_042_0_receipts.jpg \
                                --model models/receipt_counter_swinv2_best.pth
 
 # Test with SwinV2-Large model
 python individual_image_tester.py --image receipt_collages/collage_254_3_receipts.jpg \
                                --model models/receipt_counter_swinv2-large_best.pth \
                                --model-type swinv2-large
+
+# Test a single synthetic receipt sample
+python individual_image_tester.py --image synthetic_receipts/samples/receipt_sample_1.jpg \
+                               --model models/receipt_counter_swinv2_best.pth
 ```
 
 ## Theory
@@ -193,9 +251,9 @@ DEFAULT_MODEL_PARAMS = {
     
     # Training parameters
     "batch_size": 8,
-    "learning_rate": 5e-5,
-    "backbone_lr_multiplier": 0.1,
-    "epochs": 30,
+    "learning_rate": 5e-4,
+    "backbone_lr_multiplier": 0.02,
+    "epochs": 20,
     "weight_decay": 0.01,
     "label_smoothing": 0.1,
     
@@ -219,7 +277,7 @@ Parameters are determined in the following order:
 - **Core Model Files**
   - `model_factory.py` - Factory pattern for creating and loading models
   - `config.py` - Centralized configuration system
-  - `swinv2_model_download.py` - Download pre-trained models
+  - `huggingface_model_download.py` - Download any pre-trained HuggingFace model for offline use
 
 - **Dataset & Training**
   - `datasets.py` - Dataset classes
@@ -228,7 +286,9 @@ Parameters are determined in the following order:
   - `evaluate_swinv2_classifier.py` - Evaluation script
 
 - **Data Generation**
-  - `create_receipt_collages.py` - Generate synthetic receipt collages
+  - `create_receipt_collages.py` - Generate synthetic receipt collages with portrait/landscape orientations
+  - `create_synthetic_receipts.py` - Generate fully synthetic receipts (100 individual samples)
+  - `create_tax_documents.py` - Generate anonymized Australian tax documents for 0-receipt examples
   - `create_collage_dataset.py` - Create datasets from collages
   - `create_rectangle_dataset.py` - Generate simplified rectangle-based dataset
 
@@ -259,27 +319,9 @@ Parameters are determined in the following order:
 This project is licensed under the MIT License - see the LICENSE file for details.
 
 
-poch 3/20, Train Loss: 0.5786, Val Loss: 0.4934, Accuracy: 100.00%, Balanced Accuracy: 100.00%, F1 Macro: 100.00%
-Saved new best model with F1 Macro: 1.0000
-Epoch 4/20: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 7/7 [00:31<00:00,  4.53s/it, loss=0.48]
-Epoch 4/20, Train Loss: 0.5097, Val Loss: 0.5698, Accuracy: 80.00%, Balanced Accuracy: 77.94%, F1 Macro: 75.49%
-Saved new best model with F1 Macro: 0.7549
-EarlyStopping: No improvement for 1 epochs. Best value: 1.0000, Current value: 0.7549
-Epoch 5/20: 100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 7/7 [00:30<00:00,  4.41s/it, loss=0.467]
-Epoch 5/20, Train Loss: 0.4529, Val Loss: 0.3948, Accuracy: 95.56%, Balanced Accuracy: 93.87%, F1 Macro: 94.01%
-Saved new best model with F1 Macro: 0.9401
-EarlyStopping: No improvement for 2 epochs. Best value: 1.0000, Current value: 0.9401
-Epoch 6/20: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 7/7 [00:30<00:00,  4.37s/it, loss=0.52]
-Epoch 6/20, Train Loss: 0.4556, Val Loss: 0.3493, Accuracy: 97.78%, Balanced Accuracy: 98.04%, F1 Macro: 97.03%
-Saved new best model with F1 Macro: 0.9703
-EarlyStopping: No improvement for 3 epochs. Best value: 1.0000, Current value: 0.9703
-EarlyStopping: Stopping training after 3 epochs with no improvement
-Early stopping triggered after 6 epochs
 
-Loading best model for final evaluation...
-Loading model from models/receipt_counter_swinv2_best.pth as a SwinV2 model
-Successfully loaded model with strict=True
 
-Best Model Results:
-Accuracy: 97.78%
-F1 Macro: 97.03%
+python huggingface_model_download.py --model_name "microsoft/swinv2-large-patch4-window12-192-22k" --output_dir /Users/tod/PretrainedLLM/swin_large
+
+python train_swinv2_classification.py --model_type swinv2 --offline \
+                                    --pretrained_model_dir Users/tod/PretrainedLLM/swin_large

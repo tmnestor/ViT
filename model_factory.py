@@ -28,7 +28,7 @@ class ModelFactory:
     }
     
     @classmethod
-    def create_transformer(cls, model_type="swinv2", pretrained=True, num_classes=None, verbose=True, mode="train"):
+    def create_transformer(cls, model_type="swinv2", pretrained=True, num_classes=None, verbose=True, mode="train", offline=False, pretrained_model_dir=None):
         """Create a transformer model for receipt counting.
         
         Args:
@@ -37,6 +37,8 @@ class ModelFactory:
             num_classes: Number of output classes. If None, will be determined from config
             verbose: Whether to show warnings about weight initialization
             mode: "train" for training mode, "eval" for evaluation mode
+            offline: If True, use locally downloaded model weights without online access
+            pretrained_model_dir: Directory containing pre-downloaded model weights (used with offline=True)
             
         Returns:
             Configured transformer model
@@ -72,26 +74,41 @@ class ModelFactory:
         
         # Create appropriate model type
         try:
+            # Common parameters for all model types
+            from_pretrained_kwargs = {
+                "num_labels": num_classes,
+                "ignore_mismatched_sizes": True
+            }
+            
+            # Set the model path (either from pretrained_model_dir or from MODEL_PATHS)
+            model_path = cls.MODEL_PATHS[model_type]
+            
+            # Add offline parameters if specified
+            if offline:
+                from_pretrained_kwargs["local_files_only"] = True
+                if pretrained_model_dir:
+                    # For local directory usage, we should use the directory directly
+                    model_path = pretrained_model_dir
+                    print(f"Loading model directly from: {model_path}")
+            
+            # Load the appropriate model type
             if model_type == "vit":
                 from transformers import ViTForImageClassification
                 model = ViTForImageClassification.from_pretrained(
-                    cls.MODEL_PATHS["vit"], 
-                    num_labels=num_classes,
-                    ignore_mismatched_sizes=True
+                    model_path, 
+                    **from_pretrained_kwargs
                 )
             elif model_type == "swin":
                 from transformers import SwinForImageClassification
                 model = SwinForImageClassification.from_pretrained(
-                    cls.MODEL_PATHS["swin"], 
-                    num_labels=num_classes,
-                    ignore_mismatched_sizes=True
+                    model_path, 
+                    **from_pretrained_kwargs
                 )
             elif model_type == "swinv2" or model_type == "swinv2-large":
                 from transformers import Swinv2ForImageClassification
                 model = Swinv2ForImageClassification.from_pretrained(
-                    cls.MODEL_PATHS[model_type], 
-                    num_labels=num_classes,
-                    ignore_mismatched_sizes=True
+                    model_path, 
+                    **from_pretrained_kwargs
                 )
         finally:
             # Restore previous verbosity if changed

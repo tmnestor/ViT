@@ -1,5 +1,5 @@
-albucore==0.0.23
-albumentations==2.0.5
+# Albumentations has been replaced with torchvision.transforms
+# torchvision is already included as a dependency
 annotated-types==0.7.0
 blinker==1.9.0
 certifi==2025.1.31
@@ -22,11 +22,10 @@ matplotlib==3.10.1
 mpmath==1.3.0
 networkx==3.4.2
 numpy @ file:///Users/runner/miniforge3/conda-bld/numpy_1742254867999/work/dist/numpy-2.2.4-cp311-cp311-macosx_11_0_arm64.whl#sha256=10701f95f0b55ae60eb6c620ad18ef4823f33de7d2ed4c3914518ed68a58caeb
-opencv-python==4.11.0.86
-opencv-python-headless==4.11.0.86
+# OpenCV has been replaced with Pillow
+pillow==11.1.0  # PIL for image processing
 packaging==24.2
 pandas==2.2.3
-pillow==11.1.0
 pydantic==2.10.6
 pydantic_core==2.27.2
 pyparsing==3.2.1
