@@ -93,19 +93,19 @@ The dataset is created using the `create_synthetic_receipts.py` script, which ge
 Below are examples of the synthetic images used for training:
 
 #### Individual Receipt
-![Individual Receipt](report_images/receipt_sample_1.jpg)
+![Individual Receipt](report_assets/receipt_sample_1.jpg)
 *Fig 1: Individual synthetic receipt with realistic formatting and content*
 
 #### Single Receipt Image
-![Single Receipt](report_images/synthetic_001_1_receipts.jpg)
+![Single Receipt](report_assets/synthetic_001_1_receipts.jpg)
 *Fig 2: Training image containing a single receipt*
 
 #### Multiple Receipts Image
-![Two Receipts](report_images/synthetic_003_2_receipts.jpg)
+![Two Receipts](report_assets/synthetic_003_2_receipts.jpg)
 *Fig 3: Training image containing multiple receipts (2 receipts)*
 
 #### Tax Document (0 Receipts)
-![Tax Document](report_images/taxdoc_1.jpg)
+![Tax Document](report_assets/taxdoc_1.jpg)
 *Fig 4: Australian tax document used as 0-receipt example*
 
 ### Key Dataset Features
