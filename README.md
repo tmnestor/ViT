@@ -26,8 +26,11 @@ conda activate vit_env
 
 # Option 2: Using pip with venv
 python -m venv venv
-source venv/bin/activate
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
+
+# Note: requirements.txt includes all the necessary packages 
+# with specific versions for reproducible environment setup
 ```
 
 ### Quick Start
