@@ -5,9 +5,30 @@ This allows any supported model to be used in offline mode.
 
 import argparse
 import os
+import sys
+import subprocess
 from pathlib import Path
 
-from transformers import AutoConfig, AutoImageProcessor, AutoModel
+# Set environment variable to disable NumPy 2.x compatibility warnings
+os.environ["NUMPY_EXPERIMENTAL_ARRAY_FUNCTION"] = "0"
+
+# Check if running in conda environment
+if 'CONDA_PREFIX' not in os.environ:
+    print("WARNING: Not running in a conda environment.")
+    print("Please activate the vit_env conda environment first:")
+    print("conda activate vit_env")
+    sys.exit(1)
+
+# Create a simple script to download the model directly using huggingface_hub
+try:
+    from huggingface_hub import snapshot_download
+except ImportError:
+    try:
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "huggingface_hub"])
+        from huggingface_hub import snapshot_download
+    except Exception as e:
+        print(f"Error installing huggingface_hub: {e}")
+        sys.exit(1)
 
 
 def download_model(model_name, output_dir=None):
@@ -20,47 +41,54 @@ def download_model(model_name, output_dir=None):
     """
     print(f"Downloading {model_name}...")
 
-    # Download the model config
-    print("Downloading model configuration...")
-    config = AutoConfig.from_pretrained(model_name)
-    print("Model configuration downloaded successfully")
-
-    # Download the model weights
-    print("Downloading model weights...")
-    model = AutoModel.from_pretrained(
-        model_name, config=config, ignore_mismatched_sizes=True
-    )
-    print("Model weights downloaded successfully")
-
-    # Download the image processor
-    print("Downloading image processor...")
     try:
-        processor = AutoImageProcessor.from_pretrained(model_name)
-        print("Image processor downloaded successfully")
+        # Get the local directory where the model will be cached
+        cache_dir = os.path.join(os.path.expanduser("~"), ".cache", "huggingface", "hub")
+        
+        # Download the model files directly using huggingface_hub
+        print(f"Downloading model files for {model_name}...")
+        local_dir = snapshot_download(
+            repo_id=model_name,
+            local_dir=output_dir,
+            local_dir_use_symlinks=False,
+            revision="main",
+            ignore_patterns=["*.msgpack", "*.safetensors.index.json"],
+            resume_download=True
+        )
+        
+        print(f"Model downloaded successfully to: {local_dir}")
+        
+        # If output_dir was not specified but we still want to know where the files are
+        if not output_dir:
+            # Model is in huggingface cache
+            model_path = os.path.join(cache_dir, "models--" + model_name.replace("/", "--"))
+            if os.path.exists(model_path):
+                print(f"Model is also cached at: {model_path}")
+                
     except Exception as e:
-        print(f"Warning: Could not download image processor: {e}")
-        print("This may be normal for some model types")
-        processor = None
+        print(f"Error downloading model: {e}")
+        if "NumPy" in str(e) or "numpy" in str(e).lower():
+            print("This appears to be a NumPy 2.x compatibility issue.")
+            print("Solutions:")
+            print("1. Use a conda environment with numpy<2.0")
+            print("2. Run: conda install -y numpy=1.24.3")
+        elif "torch" in str(e).lower() or "torchvision" in str(e).lower():
+            print("This appears to be a PyTorch/TorchVision compatibility issue.")
+            print("Solutions:")
+            print("1. Create a new conda environment with compatible versions:")
+            print("   conda create -n model_env python=3.10 torch torchvision transformers -c pytorch -c huggingface -c conda-forge")
+        sys.exit(1)
 
-    # If output directory is specified, save the model files there as well
-    if output_dir:
-        output_path = Path(output_dir)
-        output_path.mkdir(parents=True, exist_ok=True)
-
-        print(f"Saving model to {output_path}...")
-        model.save_pretrained(output_path)
-        if processor:
-            processor.save_pretrained(output_path)
-        print(f"Model saved to {output_path}")
-
-    # Print cache location
+    # Print offline usage instructions
     print(
         "\nModel is now cached locally. You can use --offline mode with the training script."
     )
-
-    # Get the cache directory path
-    cache_dir = os.path.join(os.path.expanduser("~"), ".cache", "huggingface", "hub")
-    print(f"Default cache location: {cache_dir}")
+    
+    # Print the directory where the model is saved
+    if output_dir:
+        print(f"Model saved to: {output_dir}")
+    else:
+        print(f"Default cache location: {os.path.join(os.path.expanduser('~'), '.cache', 'huggingface', 'hub')}")
 
 
 def main():
