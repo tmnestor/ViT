@@ -1,5 +1,6 @@
 # SwinV2-Large Receipt Classification Report
 
+
 ## 1. SwinV2-Large Architecture
 
 The SwinV2-Large model is an advanced hierarchical vision transformer developed by Microsoft Research that addresses key limitations in scaling vision models. It builds upon the original Swin Transformer with several critical improvements for better stability and performance.
